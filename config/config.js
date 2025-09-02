@@ -2,53 +2,48 @@ require('dotenv').config();
 
 module.exports = {
   development: {
-    // Database utama untuk aplikasi
-    main: {
-      username: process.env.DEV_USERNAME,
-      password: process.env.DEV_PASSWORD,
-      database: process.env.DEV_DATABASE,
-      host: process.env.DEV_HOST,
-      dialect: process.env.DEV_DIALECT
-    },
-    // Database master untuk user
-    master: {
-      username: process.env.DEV_MASTER_USERNAME,
-      password: process.env.DEV_MASTER_PASSWORD,
-      database: process.env.DEV_MASTER_DATABASE,
-      host: process.env.DEV_MASTER_HOST,
-      dialect: process.env.DEV_MASTER_DIALECT
+    username: process.env.DEV_USERNAME || 'root',
+    password: process.env.DEV_PASSWORD || '',
+    database: process.env.DEV_DATABASE || 'api_absensi_dev',
+    host: process.env.DEV_HOST || 'localhost',
+    dialect: process.env.DEV_DIALECT || 'mysql',
+    port: process.env.DEV_PORT || 3306,
+    logging: false,
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
     }
   },
   test: {
-    main: {
-      username: process.env.TEST_USERNAME,
-      password: process.env.TEST_PASSWORD,
-      database: process.env.TEST_DATABASE,
-      host: process.env.TEST_HOST,
-      dialect: process.env.TEST_DIALECT
-    },
-    master: {
-      username: process.env.TEST_MASTER_USERNAME,
-      password: process.env.TEST_MASTER_PASSWORD,
-      database: process.env.TEST_MASTER_DATABASE,
-      host: process.env.TEST_MASTER_HOST,
-      dialect: process.env.TEST_MASTER_DIALECT
+    username: process.env.TEST_USERNAME || 'root',
+    password: process.env.TEST_PASSWORD || '',
+    database: process.env.TEST_DATABASE || 'api_absensi_test',
+    host: process.env.TEST_HOST || 'localhost',
+    dialect: process.env.TEST_DIALECT || 'mysql',
+    port: process.env.TEST_PORT || 3306,
+    logging: false,
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
     }
   },
   production: {
-    main: {
-      username: process.env.PROD_USERNAME,
-      password: process.env.PROD_PASSWORD,
-      database: process.env.PROD_DATABASE,
-      host: process.env.PROD_HOST,
-      dialect: process.env.PROD_DIALECT
-    },
-    master: {
-      username: process.env.PROD_MASTER_USERNAME,
-      password: process.env.PROD_MASTER_PASSWORD,
-      database: process.env.PROD_MASTER_DATABASE,
-      host: process.env.PROD_MASTER_HOST,
-      dialect: process.env.PROD_MASTER_DIALECT
+    username: process.env.PROD_USERNAME,
+    password: process.env.PROD_PASSWORD,
+    database: process.env.PROD_DATABASE,
+    host: process.env.PROD_HOST,
+    dialect: process.env.PROD_DIALECT || 'mysql',
+    port: process.env.PROD_PORT || 3306,
+    logging: false,
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
     }
   }
 };

@@ -11,13 +11,7 @@ module.exports = {
       },
       id_user: {
         type: Sequelize.INTEGER,
-        allowNull: true,
-        references: {
-          model: 'user',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
+        allowNull: true
       },
       id_skpd: {
         type: Sequelize.STRING(10),
