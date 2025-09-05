@@ -288,7 +288,7 @@ const login = async (req, res) => {
   }
 };
 
-const loginAdminOpd = async (req, res) => {
+const loginAdmin = async (req, res) => {
   try {
     const { username, password } = req.body;
     console.log(req.body);
@@ -407,7 +407,7 @@ const loginAdminOpd = async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.error('LoginAdminOpd Error:', error);
+    console.error('LoginAdmin Error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -529,4 +529,42 @@ const logoutAll = async (req, res) => {
   }
 };
 
-module.exports = { register, login, loginAdminOpd, refreshToken, logout, logoutAll };
+// Force logout user (untuk admin atau sistem)
+const forceLogoutUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        error: "User ID diperlukan",
+        code: "USER_ID_REQUIRED"
+      });
+    }
+
+    // Cek apakah user ada
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        error: "User tidak ditemukan",
+        code: "USER_NOT_FOUND"
+      });
+    }
+
+    // Hapus refresh token dan reset device_id
+    await user.update({
+      refresh_token: null,
+      device_id: null
+    });
+
+    res.json({ 
+      message: "User berhasil di-logout paksa dari semua perangkat",
+      success: true
+    });
+
+  } catch (error) {
+    console.error('Force Logout User Error:', error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+module.exports = { register, login, loginAdmin, refreshToken, logout, logoutAll, forceLogoutUser };

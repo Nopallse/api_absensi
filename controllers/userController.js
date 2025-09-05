@@ -1,53 +1,24 @@
-const { User, Lokasi, MstPegawai, SkpdTbl } = require("../models");
+const { User, Lokasi, MstPegawai, SkpdTbl, AdmOpd, AdmUpt } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
+const { 
+  mapUsersWithMasterData, 
+  getUserWithMasterData, 
+  getSkpdIdByUserLevel, 
+  searchUsersWithMasterData 
+} = require("../utils/userMasterUtils");
 
 const getUser = async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log(userId);
 
-    const user = await User.findOne({
-      where: { id: userId },
-      attributes: { exclude: ["password_hash"] }
-    });
+    const userData = await getUserWithMasterData(userId);
 
-    if (!user) {
+    if (!userData) {
       return res.status(404).json({ error: "User tidak ditemukan" });
     }
 
-    // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await MstPegawai.findOne({
-      where: { NIP: user.username },
-      include: [
-        {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-        }
-      ],
-      attributes: ['NIP', 'NAMA', 'KDSKPD', 'KDPANGKAT', 'JENIS_JABATAN']
-    });
-
-    // Format response dengan data lengkap
-    const userData = user.toJSON();
-    
-    if (pegawai) {
-      userData.nama = pegawai.NAMA;
-      userData.nip = user.username;
-      userData.kdskpd = pegawai.KDSKPD;
-      userData.skpd = pegawai.SkpdTbl ? pegawai.SkpdTbl.NMSKPD : null;
-      userData.status_skpd = pegawai.SkpdTbl ? pegawai.SkpdTbl.StatusSKPD : null;
-      userData.pangkat = pegawai.KDPANGKAT;
-      userData.jabatan = pegawai.JENIS_JABATAN;
-    } else {
-      userData.nama = null;
-      userData.nip = user.username;
-      userData.kdskpd = null;
-      userData.skpd = null;
-      userData.status_skpd = null;
-      userData.pangkat = null;
-      userData.jabatan = null;
-    }
+    console.log(userData,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
     res.json(userData);
   } catch (error) {
@@ -64,24 +35,36 @@ const getAllUser = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     
-    // Ambil parameter filter
-    const { id_skpd } = req.query;
+    // Ambil level user dari request (req.user.level)
+    const userLevel = req.user.level;
+    console.log("Level user:", userLevel);
+    
+    let id_skpd;
+
+    if (userLevel === '1') {
+      id_skpd = req.query.id_skpd;
+    } else if (userLevel === '2' || userLevel === '3') {
+      const user = await User.findByPk(req.user.id, {
+        include: [
+          {
+            model: userLevel === '2' ? AdmOpd : AdmUpt,
+            attributes: ['id_skpd']
+          }
+        ]
+      });
+      id_skpd = getSkpdIdByUserLevel(user, userLevel);
+    }
+
     console.log(id_skpd,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
     let totalUsers;
     let users;
 
     if (id_skpd) {
-      // OPTIMASI: Ambil data master terlebih dahulu untuk filter
+      // Ambil data master terlebih dahulu untuk filter
       const pegawaiWithSkpd = await MstPegawai.findAll({
         where: { KDSKPD: id_skpd },
-        include: [
-          {
-            model: SkpdTbl,
-            attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-          }
-        ],
-        attributes: ['NIP', 'NAMA', 'KDSKPD']
+        attributes: ['NIP']
       });
 
       // Buat array NIP yang valid untuk filter
@@ -118,38 +101,8 @@ const getAllUser = async (req, res) => {
         offset: offset,
       });
 
-      // Buat map untuk data master untuk lookup cepat
-      const masterDataMap = new Map();
-      pegawaiWithSkpd.forEach(p => {
-        masterDataMap.set(p.NIP, {
-          nama: p.NAMA,
-          kdskpd: p.KDSKPD,
-          skpd: p.SkpdTbl ? p.SkpdTbl.NMSKPD : null,
-          status_skpd: p.SkpdTbl ? p.SkpdTbl.StatusSKPD : null
-        });
-      });
-
-      // Gabungkan data tanpa Promise.all
-      users = userList.map(user => {
-        const userData = user.toJSON();
-        const masterData = masterDataMap.get(user.username);
-        
-        if (masterData) {
-          userData.nama = masterData.nama;
-          userData.nip = user.username;
-          userData.kdskpd = masterData.kdskpd;
-          userData.skpd = masterData.skpd;
-          userData.status_skpd = masterData.status_skpd;
-        } else {
-          userData.nama = null;
-          userData.nip = user.username;
-          userData.kdskpd = null;
-          userData.skpd = null;
-          userData.status_skpd = null;
-        }
-        
-        return userData;
-      });
+      // Map dengan data master menggunakan utility
+      users = await mapUsersWithMasterData(userList);
 
     } else {
       // Tanpa filter - ambil semua data dengan pagination
@@ -160,53 +113,8 @@ const getAllUser = async (req, res) => {
         offset: offset,
       });
 
-      // OPTIMASI: Ambil semua data master sekaligus
-      const usernames = userList.map(u => u.username);
-      const allPegawai = await MstPegawai.findAll({
-        where: {
-          NIP: usernames
-        },
-        include: [
-          {
-            model: SkpdTbl,
-            attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-          }
-        ],
-        attributes: ['NIP', 'NAMA', 'KDSKPD']
-      });
-
-      // Buat map untuk lookup cepat
-      const masterDataMap = new Map();
-      allPegawai.forEach(p => {
-        masterDataMap.set(p.NIP, {
-          nama: p.NAMA,
-          kdskpd: p.KDSKPD,
-          skpd: p.SkpdTbl ? p.SkpdTbl.NMSKPD : null,
-          status_skpd: p.SkpdTbl ? p.SkpdTbl.StatusSKPD : null
-        });
-      });
-
-      // Gabungkan data tanpa Promise.all
-      users = userList.map(user => {
-        const userData = user.toJSON();
-        const masterData = masterDataMap.get(user.username);
-        
-        if (masterData) {
-          userData.nama = masterData.nama;
-          userData.nip = user.username;
-          userData.kdskpd = masterData.kdskpd;
-          userData.skpd = masterData.skpd;
-          userData.status_skpd = masterData.status_skpd;
-        } else {
-          userData.nama = null;
-          userData.nip = user.username;
-          userData.kdskpd = null;
-          userData.skpd = null;
-          userData.status_skpd = null;
-        }
-        
-        return userData;
-      });
+      // Map dengan data master menggunakan utility
+      users = await mapUsersWithMasterData(userList);
     }
 
     const totalPages = Math.ceil(totalUsers / limit);
@@ -232,72 +140,12 @@ const getAllUser = async (req, res) => {
 const searchUsers = async (req, res) => {
   try {
     const { query, id_skpd } = req.query;
-    const users = await User.findAll({
-      where: {
-        [Sequelize.Op.or]: [
-          { username: { [Sequelize.Op.like]: `%${query}%` } },
-          { email: { [Sequelize.Op.like]: `%${query}%` } },
-        ],
-      }
-    });
+    
+    // Gunakan utility untuk search dengan master data
+    const usersWithMasterData = await searchUsersWithMasterData(query, id_skpd);
 
-    if (users.length === 0) {
+    if (usersWithMasterData.length === 0) {
       return res.status(404).json({ error: "User tidak ditemukan" });
-    }
-
-    // OPTIMASI: Ambil semua data master sekaligus
-    const usernames = users.map(u => u.username);
-    const allPegawai = await MstPegawai.findAll({
-      where: {
-        NIP: usernames
-      },
-      include: [
-        {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-        }
-      ],
-      attributes: ['NIP', 'NAMA', 'KDSKPD']
-    });
-
-    // Buat map untuk lookup cepat
-    const masterDataMap = new Map();
-    allPegawai.forEach(p => {
-      masterDataMap.set(p.NIP, {
-        nama: p.NAMA,
-        kdskpd: p.KDSKPD,
-        skpd: p.SkpdTbl ? p.SkpdTbl.NMSKPD : null,
-        status_skpd: p.SkpdTbl ? p.SkpdTbl.StatusSKPD : null
-      });
-    });
-
-    // Gabungkan data tanpa Promise.all
-    let usersWithMasterData = users.map(user => {
-      const userData = user.toJSON();
-      const masterData = masterDataMap.get(user.username);
-      
-      if (masterData) {
-        userData.nama = masterData.nama;
-        userData.nip = user.username;
-        userData.kdskpd = masterData.kdskpd;
-        userData.skpd = masterData.skpd;
-        userData.status_skpd = masterData.status_skpd;
-      } else {
-        userData.nama = null;
-        userData.nip = user.username;
-        userData.kdskpd = null;
-        userData.skpd = null;
-        userData.status_skpd = null;
-      }
-      
-      return userData;
-    });
-
-    // Filter berdasarkan SKPD jika ada
-    if (id_skpd) {
-      usersWithMasterData = usersWithMasterData.filter(user => 
-        user.kdskpd === id_skpd
-      );
     }
 
     res.json({
@@ -307,6 +155,41 @@ const searchUsers = async (req, res) => {
   } 
   catch (error) {
     console.error('SearchUsers Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const searchUsersOpd = async (req, res) => {
+  try {
+    const { query } = req.query;
+    console.log(query,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    
+    // Ambil user beserta relasi untuk mendapatkan id_skpd
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        {
+          model: AdmOpd,
+          attributes: ['id_skpd']
+        }
+      ]
+    });
+    
+    const id_skpd = user.AdmOpd?.id_skpd;
+    
+    // Gunakan utility untuk search dengan master data
+    const usersWithMasterData = await searchUsersWithMasterData(query, id_skpd);
+
+    if (usersWithMasterData.length === 0) {
+      return res.status(404).json({ error: "User tidak ditemukan" });
+    }
+
+    res.json({
+      data: usersWithMasterData,
+      filter: id_skpd ? { id_skpd } : null
+    });
+  } 
+  catch (error) {
+    console.error('SearchUsersOpd Error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -447,13 +330,56 @@ const updateUserByAdmin = async (req, res) => {
 
 const saveFcmToken = async (req, res) => {
   const username = req.user.username; 
-  const { fcm_token } = req.body;
+  const { fcm_token, device_id } = req.body;
 
   if (!fcm_token) return res.status(400).json({ error: 'Token wajib' });
 
-  await User.update({ fcm_token: fcm_token }, { where: { username: username } });
+  const updateData = { fcm_token: fcm_token };
+  
+  // Jika device_id disediakan, update juga device_id
+  if (device_id) {
+    updateData.device_id = device_id;
+  }
+
+  await User.update(updateData, { where: { username: username } });
 
   res.json({ success: true });
+};
+
+// Reset device ID (hanya bisa dilakukan jika user belum memiliki device_id atau sudah mendapat persetujuan admin)
+const resetDeviceId = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { device_id } = req.body;
+
+    if (!device_id) {
+      return res.status(400).json({ error: 'Device ID wajib diisi' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User tidak ditemukan' });
+    }
+
+    // Cek apakah user sudah memiliki device_id
+    if (user.device_id && user.device_id !== device_id) {
+      return res.status(400).json({ 
+        error: 'Akun ini sudah terdaftar di device lain. Silakan ajukan reset device melalui menu yang tersedia.' 
+      });
+    }
+
+    // Update device_id
+    await user.update({ device_id: device_id });
+
+    res.json({ 
+      message: 'Device berhasil didaftarkan',
+      success: true 
+    });
+
+  } catch (error) {
+    console.error('Reset Device ID Error:', error);
+    res.status(500).json({ error: error.message });
+  }
 };
 
 // Mendapatkan lokasi user berdasarkan SKPD/Satker/Bidang
@@ -498,4 +424,4 @@ const getMyLocation = async (req, res) => {
   }
 };
 
-module.exports = { getUser, getAllUser, getUserById, updateUser, updateUserByAdmin, searchUsers, saveFcmToken, getMyLocation };
+module.exports = { getUser, getAllUser, getUserById, updateUser, updateUserByAdmin, searchUsers, searchUsersOpd, saveFcmToken, resetDeviceId, getMyLocation };

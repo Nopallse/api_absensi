@@ -21,6 +21,18 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'id_user',
         sourceKey: 'id'
       });
+
+      // Relasi ke device reset requests (sebagai user yang request)
+      User.hasMany(models.DeviceResetRequest, {
+        foreignKey: 'user_id',
+        as: 'deviceResetRequests'
+      });
+
+      // Relasi ke device reset requests (sebagai admin yang approve)
+      User.hasMany(models.DeviceResetRequest, {
+        foreignKey: 'approved_by',
+        as: 'approvedResetRequests'
+      });
     }
   }
 

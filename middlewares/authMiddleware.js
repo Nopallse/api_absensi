@@ -30,8 +30,10 @@ const authMiddleware = (options = {}) => {
             level: user.level,
             device_id: user.device_id
           };
-          
+
+          console.log(user);
           // Validasi level jika diperlukan
+          console.log(options.requireLevel);
           if (options.requireLevel && !checkUserLevel(user.level, options.requireLevel)) {
             return res.status(403).json({
               error: 'Akses ditolak. Level akses tidak mencukupi',
@@ -209,6 +211,46 @@ const checkUserLevel = (userLevel, requiredLevel) => {
   return false;
 };
 
+// Middleware khusus untuk mengecek device_id user (bukan admin)
+const requireUserDeviceCheck = () => {
+  return async (req, res, next) => {
+    try {
+      // Hanya berlaku untuk user biasa (level bukan 1, 2, 3)
+      if (['1', '2', '3'].includes(req.user.level)) {
+        return next(); // Admin tidak perlu pengecekan device_id
+      }
+
+      const deviceId = req.headers.device_id;
+      
+      if (!deviceId) {
+        return res.status(401).json({ 
+          error: "Device ID diperlukan untuk user",
+          code: "DEVICE_ID_REQUIRED"
+        });
+      }
+
+      // Cek apakah device_id cocok dengan yang ada di database
+      if (req.user.device_id !== deviceId) {
+        // Jika tidak cocok, hapus refresh_token untuk logout paksa
+        await User.update(
+          { refresh_token: null },
+          { where: { id: req.user.id } }
+        );
+
+        return res.status(401).json({ 
+          error: "Device ID tidak cocok. Anda telah di-logout dari semua perangkat. Silakan login ulang.",
+          code: "DEVICE_ID_MISMATCH"
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error("User Device Check Error:", error);
+      res.status(500).json({ error: "Kesalahan server internal" });
+    }
+  };
+};
+
 // Shortcut functions untuk kemudahan penggunaan
 const requireSuperAdmin = () => authMiddleware({ requireLevel: ['1'] });
 const requireAdminOpd = () => authMiddleware({ requireLevel: ['1', '2'], requireAdminOpd: true });
@@ -222,5 +264,6 @@ module.exports = {
   requireAdminOpd, 
   requireAdminUpt,
   requireAuth,
-  requireJWT
+  requireJWT,
+  requireUserDeviceCheck
 };

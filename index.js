@@ -45,15 +45,15 @@ const syncDatabases = async () => {
 };
 
 // Routes
-app.use("/api/admin", adminRoutes);
-app.use("/admin-opd", adminOpdRoutes);
+app.use("/api/superadmin", adminRoutes);
+app.use("/api/admin", adminOpdRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/kehadiran", kehadiranRoutes);
-app.use("/user", usersRoutes);
-app.use("/skpd", skpdRoutes);
-app.use("/lokasi", lokasiRoutes);
-app.use("/jadwal-kegiatan", jadwalKegiatanRoutes);
-app.use("/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
+app.use("/api/kehadiran", kehadiranRoutes);
+app.use("/api/user", usersRoutes);
+app.use("/api/skpd", skpdRoutes);
+app.use("/api/lokasi", lokasiRoutes);
+app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
+app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
 
 // Start the server
 app.listen(PORT, async () => {

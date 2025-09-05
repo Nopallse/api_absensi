@@ -9,7 +9,7 @@ const {
   deleteLokasi,
   searchLokasi,
 } = require("../controllers/lokasiController");
-const { register } = require("../controllers/authController");
+const { register, forceLogoutUser } = require("../controllers/authController");
 const { getUserById, getAllUser, searchUsers, updateUserByAdmin } = require("../controllers/userController");
 const {  getDetailKetidakhadiran, updateKetidakhadiranStatus, getAllKetidakhadiran } = require("../controllers/ketidakhadiranController");
 const { getAllKehadiran, getKehadiranByUserId, getKehadiranById, getMonthlyAttendanceByFilter, getMonthlyAttendanceSummaryByUser } = require("../controllers/kehadiranController");
@@ -53,6 +53,7 @@ const {
 const { getAllJadwalKegiatan, createJadwalKegiatan, getJadwalKegiatanById, updateJadwalKegiatan, deleteJadwalKegiatan, addLokasiToKegiatan, getLokasiKegiatan, removeLokasiFromKegiatan    } = require("../controllers/jadwalKegiatanController");
 const { addSkpdToKegiatanLokasi, removeSkpdFromKegiatanLokasi } = require("../controllers/jadwalKegiatanLokasiSkpdController");
 const { getAllSettings, updateGlobalTipeJadwal, getCurrentTipeJadwal } = require("../controllers/systemSettingController");
+const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
 
 // Routes untuk Super Admin (level 1)
 router.post("/register", requireSuperAdmin(), register);
@@ -70,6 +71,7 @@ router.get("/users", requireSuperAdmin(), getAllUser)
 router.get("/users/search", requireSuperAdmin(), searchUsers);
 router.get("/users/:id", requireSuperAdmin(), getUserById);
 router.patch("/users/:id", requireSuperAdmin(), updateUserByAdmin);
+router.post("/users/:userId/force-logout", requireSuperAdmin(), forceLogoutUser);
 
 
 
@@ -162,5 +164,9 @@ router.delete('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id', requireSuperAdm
 router.get("/system-settings", requireSuperAdmin(), getAllSettings);
 router.get("/system-settings/tipe-jadwal", requireSuperAdmin(), getCurrentTipeJadwal);
 router.put("/system-settings/tipe-jadwal", requireSuperAdmin(), updateGlobalTipeJadwal);
+
+// Device Reset Management
+router.get("/device-reset-requests", requireSuperAdmin(), getAllResetRequests);
+router.put("/device-reset-requests/:id", requireSuperAdmin(), updateResetRequestStatus);
 
 module.exports = router;
