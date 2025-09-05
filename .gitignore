@@ -67,3 +67,5 @@ Thumbs.db
 # Uploads
 uploads/*
 !uploads/.gitkeep
+
+package-lock.json
