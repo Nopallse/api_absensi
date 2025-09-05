@@ -48,6 +48,10 @@ db[masterJadwalKegiatanModel.name] = masterJadwalKegiatanModel;
 const jadwalKegiatanLokasiSkpdModel = require('./jadwalKegiatanLokasiSkpd.js')(mainSequelize, Sequelize.DataTypes);
 db[jadwalKegiatanLokasiSkpdModel.name] = jadwalKegiatanLokasiSkpdModel;
 
+// Load model admin log
+const adminLogModel = require('./adminLog.js')(mainSequelize, Sequelize.DataTypes);
+db[adminLogModel.name] = adminLogModel;
+
 Object.keys(db).forEach(modelName => {
   if (db[modelName].associate) {
     db[modelName].associate(db);

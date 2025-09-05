@@ -1,12 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const { requireAdminOpd } = require("../middlewares/authMiddleware");
+const { adminLogMiddleware, adminDeviceResetLogMiddleware } = require("../middlewares/adminLogMiddleware");
 
 // Import controllers yang diperlukan
 const { getUserById, getAllUser, searchUsersOpd } = require("../controllers/userController");
 const { getAllKehadiran, getKehadiranByUserId } = require("../controllers/kehadiranController");
 const { getAllKetidakhadiran } = require("../controllers/ketidakhadiranController");
 const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
+const { exportPresensiHarian, exportPresensiBulanan } = require("../controllers/exportController");
 
 // User management (requires admin OPD level or higher)
 router.get("/users", requireAdminOpd(), getAllUser);
@@ -22,6 +24,30 @@ router.get("/ketidakhadiran", requireAdminOpd(), getAllKetidakhadiran);
 
 // Device reset management (requires admin OPD level or higher)
 router.get("/device-reset/requests", requireAdminOpd(), getAllResetRequests);
-router.put("/device-reset/requests/:id", requireAdminOpd(), updateResetRequestStatus);
+router.put("/device-reset/requests/:id", 
+  requireAdminOpd(), 
+  adminDeviceResetLogMiddleware('UPDATE'),
+  updateResetRequestStatus
+);
+
+// Export presensi routes (requires admin OPD level or higher)
+router.get("/kehadiran/export/harian", 
+  requireAdminOpd(), 
+  adminLogMiddleware({ 
+    action: 'EXPORT', 
+    resource: 'presensi_harian',
+    getDescription: (req) => `Export presensi harian tanggal: ${req.query.tanggal}`
+  }),
+  exportPresensiHarian
+);
+router.get("/kehadiran/export/bulanan", 
+  requireAdminOpd(), 
+  adminLogMiddleware({ 
+    action: 'EXPORT', 
+    resource: 'presensi_bulanan',
+    getDescription: (req) => `Export presensi bulanan: ${req.query.month}/${req.query.year}`
+  }),
+  exportPresensiBulanan
+);
 
 module.exports = router; 
