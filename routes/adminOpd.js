@@ -33,20 +33,10 @@ router.put("/device-reset/requests/:id",
 // Export presensi routes (requires admin OPD level or higher)
 router.get("/kehadiran/export/harian", 
   requireAdminOpd(), 
-  adminLogMiddleware({ 
-    action: 'EXPORT', 
-    resource: 'presensi_harian',
-    getDescription: (req) => `Export presensi harian tanggal: ${req.query.tanggal}`
-  }),
   exportPresensiHarian
 );
 router.get("/kehadiran/export/bulanan", 
   requireAdminOpd(), 
-  adminLogMiddleware({ 
-    action: 'EXPORT', 
-    resource: 'presensi_bulanan',
-    getDescription: (req) => `Export presensi bulanan: ${req.query.month}/${req.query.year}`
-  }),
   exportPresensiBulanan
 );
 

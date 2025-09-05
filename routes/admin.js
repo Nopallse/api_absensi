@@ -146,35 +146,13 @@ router.get("/kehadiran/monthly/summary", requireSuperAdmin(), getMonthlyAttendan
 // Export presensi routes
 router.get("/kehadiran/export/harian", 
   requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'EXPORT', 
-    resource: 'presensi_harian',
-    getDescription: (req) => `Export presensi harian tanggal: ${req.query.tanggal}`
-  }),
   exportPresensiHarian
 );
 router.get("/kehadiran/export/bulanan", 
-  requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'EXPORT', 
-    resource: 'presensi_bulanan',
-    getDescription: (req) => `Export presensi bulanan: ${req.query.month}/${req.query.year}`
-  }),
+  requireSuperAdmin(),
   exportPresensiBulanan
 );
 
-// Ketidakhadiran management
-router.get("/ketidakhadiran", requireSuperAdmin(), getAllKetidakhadiran);
-router.get("/ketidakhadiran/:id", requireSuperAdmin(), getDetailKetidakhadiran);
-router.put("/ketidakhadiran/:id", 
-  requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'UPDATE', 
-    resource: 'ketidakhadiran',
-    getDescription: (req) => `Update absence status ID: ${req.params.id}`
-  }),
-  updateKetidakhadiranStatus
-);
 
 
 // Organization Assignment Management (DinasSetjam CRUD)

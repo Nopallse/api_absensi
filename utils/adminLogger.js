@@ -1,49 +1,7 @@
-const winston = require('winston');
 const { AdminLog } = require('../models/index');
 
-// Winston logger configuration
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.json()
-  ),
-  defaultMeta: { service: 'admin-api' },
-  transports: [
-    // Console transport
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
-    }),
-    // File transport untuk admin actions
-    new winston.transports.File({ 
-      filename: 'logs/admin-actions.log',
-      level: 'info'
-    }),
-    // File transport untuk errors
-    new winston.transports.File({ 
-      filename: 'logs/admin-errors.log',
-      level: 'error'
-    })
-  ]
-});
-
-// Daily rotate file transport untuk admin logs
-const DailyRotateFile = require('winston-daily-rotate-file');
-
-logger.add(new DailyRotateFile({
-  filename: 'logs/admin-%DATE%.log',
-  datePattern: 'YYYY-MM-DD',
-  zippedArchive: true,
-  maxSize: '20m',
-  maxFiles: '14d'
-}));
-
 /**
- * Log admin action ke database dan file
+ * Log admin action ke database
  * @param {Object} logData - Data log admin
  * @param {number} logData.admin_id - ID admin
  * @param {string} logData.admin_username - Username admin
@@ -80,32 +38,14 @@ const logAdminAction = async (logData) => {
       duration_ms: logData.duration_ms
     });
 
-    // Log ke file juga
-    logger.info('Admin Action', {
-      admin_id: logData.admin_id,
-      admin_username: logData.admin_username,
-      admin_level: logData.admin_level,
-      action: logData.action,
-      resource: logData.resource,
-      resource_id: logData.resource_id,
-      description: logData.description,
-      ip_address: logData.ip_address,
-      response_status: logData.response_status,
-      duration_ms: logData.duration_ms,
-      timestamp: new Date().toISOString()
-    });
-
   } catch (error) {
-    // Log error ke file jika gagal simpan ke database
-    logger.error('Failed to log admin action to database', {
-      error: error.message,
-      logData: logData
-    });
+    // Log error ke console jika gagal simpan ke database
+    console.error('Failed to log admin action to database:', error.message);
   }
 };
 
 /**
- * Log admin error
+ * Log admin error ke database
  * @param {Object} errorData - Data error
  * @param {number} errorData.admin_id - ID admin
  * @param {string} errorData.admin_username - Username admin
@@ -131,23 +71,8 @@ const logAdminError = async (errorData) => {
       duration_ms: errorData.duration_ms || 0
     });
 
-    // Log error ke file
-    logger.error('Admin Error', {
-      admin_id: errorData.admin_id,
-      admin_username: errorData.admin_username,
-      action: errorData.action,
-      resource: errorData.resource,
-      error: errorData.error.message,
-      stack: errorData.error.stack,
-      ip_address: errorData.ip_address,
-      timestamp: new Date().toISOString()
-    });
-
   } catch (logError) {
-    logger.error('Failed to log admin error', {
-      error: logError.message,
-      originalError: errorData.error.message
-    });
+    console.error('Failed to log admin error to database:', logError.message);
   }
 };
 
@@ -195,7 +120,6 @@ const sanitizeData = (data) => {
 };
 
 module.exports = {
-  logger,
   logAdminAction,
   logAdminError,
   getClientIP,
