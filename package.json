@@ -14,7 +14,17 @@
     "db:seed:undo": "npx sequelize-cli db:seed:undo:all",
     "db:create": "npx sequelize-cli db:create",
     "db:drop": "npx sequelize-cli db:drop",
-    "db:reset": "npm run db:drop && npm run db:create && npm run db:migrate && npm run db:seed"
+    "db:reset": "npm run db:drop && npm run db:create && npm run db:migrate && npm run db:seed",
+    "docker:build": "docker build -t api-absensi .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env api-absensi",
+    "docker:dev": "docker-compose up --build",
+    "docker:dev:detached": "docker-compose up -d --build",
+    "docker:dev:down": "docker-compose down",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up --build",
+    "docker:prod:detached": "docker-compose -f docker-compose.prod.yml up -d --build",
+    "docker:prod:down": "docker-compose -f docker-compose.prod.yml down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:logs:api": "docker-compose logs -f api"
   },
   "keywords": [],
   "author": "",

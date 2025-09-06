@@ -56,7 +56,7 @@ const { addSkpdToKegiatanLokasi, removeSkpdFromKegiatanLokasi } = require("../co
 const { getAllSettings, updateGlobalTipeJadwal, getCurrentTipeJadwal } = require("../controllers/systemSettingController");
 const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
 const { getAllAdminLogs, getAdminLogById, getAdminLogsByAdminId, getAdminLogStats, deleteOldAdminLogs } = require("../controllers/adminLogController");
-const { exportPresensiHarian, exportPresensiBulanan } = require("../controllers/exportController");
+const { exportPresensiHarian, exportPresensiBulanan, debugExportHarian } = require("../controllers/exportController");
 
 // Routes untuk Super Admin (level 1)
 router.post("/register", 
@@ -146,11 +146,27 @@ router.get("/kehadiran/monthly/summary", requireSuperAdmin(), getMonthlyAttendan
 // Export presensi routes
 router.get("/kehadiran/export/harian", 
   requireSuperAdmin(), 
+  adminLogMiddleware({ 
+    action: 'EXPORT', 
+    resource: 'PRESENSI_HARIAN',
+    getDescription: (req) => `Export presensi harian untuk tanggal ${req.query.tanggal}`
+  }),
   exportPresensiHarian
 );
 router.get("/kehadiran/export/bulanan", 
   requireSuperAdmin(),
+  adminLogMiddleware({ 
+    action: 'EXPORT', 
+    resource: 'PRESENSI_BULANAN',
+    getDescription: (req) => `Export presensi bulanan untuk ${req.query.month}/${req.query.year}`
+  }),
   exportPresensiBulanan
+);
+
+// Debug endpoint untuk test export
+router.get("/debug/export/harian", 
+  requireSuperAdmin(),
+  debugExportHarian
 );
 
 
