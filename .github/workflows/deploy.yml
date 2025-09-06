@@ -21,7 +21,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script_stop: true
           script: |
-            cd /www/api_absensi
+            cd www/api_absensi
             git reset --hard
             git pull origin main
             npm ci --production
