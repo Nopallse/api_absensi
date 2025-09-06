@@ -321,82 +321,32 @@ const loginAdmin = async (req, res) => {
     }
 
     // Cek apakah user adalah admin (level 1, 2, atau 3)
-    const isAdminLevel = ['1', '2', '3'].includes(user.level);
-    if (!isAdminLevel) {
+    const adminLevel = ['1', '2', '3'].includes(user.level);
+    if (!adminLevel) {
       return res.status(401).json({ error: "Akun ini bukan admin" });
     }
 
-    // Untuk admin OPD/UPT harus punya data AdmOpd atau AdmUpt
-    if (user.level === '2' && !user.AdmOpd) {
-      return res.status(401).json({ error: "Data admin OPD tidak ditemukan" });
-    }
-    if (user.level === '3' && !user.AdmUpt) {
-      return res.status(401).json({ error: "Data admin UPT tidak ditemukan" });
-    }
-
-    const device_id = req.headers.device_id;
     
-    if (!isAdminLevel) {
-      // Cek apakah device_id sudah digunakan oleh akun lain (hanya untuk pegawai biasa)
-      if (device_id) {
-        const existingUserWithDevice = await User.findOne({ 
-          where: { 
-            device_id: device_id,
-            id: { [Op.ne]: user.id } // Exclude current user
-          } 
-        });
-        
-        if (existingUserWithDevice) {
-          return res.status(401).json({ 
-            error: "Device ID ini sudah digunakan oleh akun lain" 
-          });
-        }
-      }
-
-      if (!user.device_id && req.headers.device_id) {
-        await user.update({ device_id: req.headers.device_id });
-      }
-
-      if (user.device_id && device_id && user.device_id !== device_id) {
-        return res.status(401).json({ error: "Akun ini digunakan di perangkat lain" });
-      }
-    }
     
     // Generate JWT tokens
     const tokenPayload = {
       userId: user.id,
       username: user.username,
-      level: user.level
+      level: user.level,
+      adminOpdId: user.AdmOpd?.admopd_id || null,
+      adminUptId: user.AdmUpt?.admupt_id || null
     };
-    
-    // Add admin-specific data to token payload
-    if (user.AdmOpd) {
-      tokenPayload.adminOpdId = user.AdmOpd.admopd_id;
-    }
-    if (user.AdmUpt) {
-      tokenPayload.adminUptId = user.AdmUpt.admupt_id;
-    }
     
     const { accessToken, refreshToken } = generateTokens(tokenPayload);
     
     // Simpan refresh token ke database
     await user.update({ refresh_token: refreshToken });
     
-    // Determine appropriate success message
-    let successMessage = "Login admin berhasil";
-    if (user.level === '1') {
-      successMessage = "Login superadmin berhasil";
-    } else if (user.level === '2') {
-      successMessage = "Login admin OPD berhasil";
-    } else if (user.level === '3') {
-      successMessage = "Login admin UPT berhasil";
-    }
-
-    console.log(`${successMessage}`);
+    console.log("Admin login berhasil")
 
     // Prepare response with related data
     const responseData = {
-      message: successMessage,
+      message: "Login admin berhasil",
       accessToken,
       refreshToken,
       user: {
@@ -406,19 +356,15 @@ const loginAdmin = async (req, res) => {
         level: user.level,
         status: user.status,
         device_id: user.device_id
-      }
-    };
-
-    // Add admin OPD data if exists
-    if (user.AdmOpd) {
-      responseData.admin_opd = {
+      },
+      admin_opd: user.AdmOpd ? {
         admopd_id: user.AdmOpd.admopd_id,
         id_skpd: user.AdmOpd.id_skpd,
         id_satker: user.AdmOpd.id_satker,
         id_bidang: user.AdmOpd.id_bidang,
         kategori: user.AdmOpd.kategori
-      };
-    }
+      } : null
+    };
 
     // Add admin UPT data if exists
     if (user.AdmUpt) {
@@ -434,7 +380,7 @@ const loginAdmin = async (req, res) => {
 
     res.json(responseData);
   } catch (error) {
-    console.error('LoginAdmin Error:', error);
+    console.error('Login Admin Error:', error);
     res.status(500).json({ error: error.message });
   }
 };
