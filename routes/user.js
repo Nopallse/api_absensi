@@ -3,7 +3,6 @@ const router = express.Router();
 const { requireAuth, requireUserDeviceCheck } = require("../middlewares/authMiddleware");
 const {getAttendanceHistory ,getKehadiranToday,createKehadiran } = require("../controllers/kehadiranController");
 const { getUser,saveFcmToken, resetDeviceId, getMyLocation } = require("../controllers/userController");
-const { getKetidakhadiran,  createKetidakhadiran } = require("../controllers/ketidakhadiranController");
 const { resetDeviceSelf, registerNewDevice, requestDeviceReset, getMyResetRequests } = require("../controllers/deviceResetController");
 
 // Semua routes memerlukan authentication
@@ -17,8 +16,6 @@ router.get("/kehadiran",getAttendanceHistory)
 router.post("/kehadiran", createKehadiran);
 router.get("/kehadiran/today", getKehadiranToday);
 router.get("/lokasi", getMyLocation);
-router.get("/ketidakhadiran", getKetidakhadiran);
-router.post("/ketidakhadiran", createKetidakhadiran);
 router.post("/fcm-token", saveFcmToken);
 
 // Device reset routes

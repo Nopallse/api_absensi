@@ -50,14 +50,14 @@ services:
       DEV_MAIN_USERNAME: root
       DEV_MAIN_PASSWORD: rootpassword
       DEV_MAIN_DATABASE: ekin
-      DEV_MAIN_HOST: db-main
+      DEV_MAIN_HOST: 192.168.1.50
       DEV_MAIN_DIALECT: mysql
       DEV_MAIN_PORT: 3306
       # Master Database
       DEV_MASTER_USERNAME: clonedbekin
       DEV_MASTER_PASSWORD: "XCRtfdjNKMLo$#@%5"
       DEV_MASTER_DATABASE: esdamparkotagopar
-      DEV_MASTER_HOST: db-master
+      DEV_MASTER_HOST: 192.168.1.60
       DEV_MASTER_DIALECT: mysql
       DEV_MASTER_PORT: 3306
       # JWT

@@ -10,6 +10,7 @@ const skpdRoutes = require("./routes/skpd");
 const lokasiRoutes = require("./routes/lokasi");
 const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
 const jadwalKegiatanLokasiSkpdRoutes = require("./routes/jadwalKegiatanLokasiSkpd");
+const docsRoutes = require("./routes/docs");
 const path = require("path");
 
 // Import database connections
@@ -54,6 +55,10 @@ app.use("/api/skpd", skpdRoutes);
 app.use("/api/lokasi", lokasiRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
+app.use("/api/docs", docsRoutes);
+
+// Serve static files for Swagger UI
+app.use('/swagger', express.static(path.join(__dirname, 'swagger')));
 
 // Start the server
 app.listen(PORT, async () => {

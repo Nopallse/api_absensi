@@ -1,0 +1,2321 @@
+openapi: 3.0.3
+info:
+  title: API Absensi - Admin & Super Admin Endpoints
+  description: |
+    Dokumentasi API untuk endpoints Admin dan Super Admin sistem absensi.
+    
+    **Level Akses:**
+    - Super Admin (Level 1): Akses penuh ke semua endpoint
+    - Admin OPD (Level 2): Akses terbatas ke SKPD yang ditugaskan
+    - Admin UPT (Level 3): Akses terbatas ke Satker yang ditugaskan
+    
+    **Autentikasi:** Semua endpoint memerlukan JWT token dengan level admin yang sesuai.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@absensi.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api/admin
+    description: Development Server
+  - url: https://api.absensi.com/api/admin
+    description: Production Server
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token untuk autentikasi admin
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Error message"
+        details:
+          type: string
+          example: "Detailed error description"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: "admin001"
+        full_name:
+          type: string
+          example: "John Doe"
+        email:
+          type: string
+          example: "admin@example.com"
+        level:
+          type: string
+          enum: ["1", "2", "3", "4"]
+          example: "1"
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Lokasi:
+      type: object
+      properties:
+        lokasi_id:
+          type: integer
+          example: 1
+        nama_lokasi:
+          type: string
+          example: "Kantor Pusat"
+        alamat:
+          type: string
+          example: "Jl. Sudirman No. 1"
+        latitude:
+          type: number
+          format: float
+          example: -6.1944
+        longitude:
+          type: number
+          format: float
+          example: 106.8229
+        radius:
+          type: integer
+          example: 100
+        id_skpd:
+          type: string
+          example: "01"
+        id_satker:
+          type: string
+          example: "001"
+        id_bidang:
+          type: string
+          example: "001"
+
+    Kehadiran:
+      type: object
+      properties:
+        absen_id:
+          type: integer
+          example: 1
+        absen_nip:
+          type: string
+          example: "123456789"
+        lokasi_id:
+          type: integer
+          example: 1
+        absen_tgl:
+          type: string
+          format: date
+          example: "2025-01-01"
+        absen_tgljam:
+          type: string
+          format: date-time
+        absen_checkin:
+          type: string
+          format: time
+          example: "08:00:00"
+        absen_checkout:
+          type: string
+          format: time
+          example: "17:00:00"
+        absen_kat:
+          type: string
+          enum: ["HADIR", "izin", "sakit", "cuti", "dinas"]
+          example: "HADIR"
+        absen_apel:
+          type: string
+          enum: ["HAP", "TAP"]
+          example: "HAP"
+        absen_sore:
+          type: string
+          enum: ["HAS", "CP"]
+          example: "HAS"
+
+    JamDinas:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        nama_jam_dinas:
+          type: string
+          example: "Jam Kerja Normal"
+        deskripsi:
+          type: string
+          example: "Jam kerja untuk hari normal"
+        is_active:
+          type: boolean
+          example: true
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/JamDinasDetail'
+
+    JamDinasDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        jam_dinas_id:
+          type: integer
+          example: 1
+        hari:
+          type: string
+          enum: ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]
+          example: "senin"
+        tipe:
+          type: string
+          enum: ["normal", "ramadhan"]
+          example: "normal"
+        jam_masuk_mulai:
+          type: string
+          format: time
+          example: "07:30:00"
+        jam_masuk_selesai:
+          type: string
+          format: time
+          example: "08:30:00"
+        jam_pulang_mulai:
+          type: string
+          format: time
+          example: "16:30:00"
+        jam_pulang_selesai:
+          type: string
+          format: time
+          example: "17:30:00"
+
+    JadwalKegiatan:
+      type: object
+      properties:
+        id_kegiatan:
+          type: integer
+          example: 1
+        tanggal_kegiatan:
+          type: string
+          format: date
+          example: "2025-01-01"
+        jenis_kegiatan:
+          type: string
+          example: "Apel Gabungan"
+        keterangan:
+          type: string
+          example: "Kegiatan apel gabungan mingguan"
+
+    DeviceResetRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 123
+        reason:
+          type: string
+          example: "Ganti handphone baru"
+        status:
+          type: string
+          enum: ["pending", "approved", "rejected"]
+          example: "pending"
+        admin_response:
+          type: string
+          example: "Request disetujui"
+        approved_by:
+          type: integer
+          example: 1
+        approved_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    AdminLog:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        admin_id:
+          type: integer
+          example: 1
+        action:
+          type: string
+          example: "CREATE"
+        resource:
+          type: string
+          example: "users"
+        resource_id:
+          type: string
+          example: "123"
+        description:
+          type: string
+          example: "Create new user: admin001"
+        ip_address:
+          type: string
+          example: "192.168.1.1"
+        user_agent:
+          type: string
+          example: "Mozilla/5.0..."
+        status:
+          type: string
+          enum: ["success", "error"]
+          example: "success"
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  # Dashboard Endpoints
+  /dashboard/overview:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard overview statistics
+      description: Mendapatkan statistik overview dashboard untuk super admin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard overview data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalUsers:
+                    type: integer
+                    example: 150
+                  totalLocations:
+                    type: integer
+                    example: 25
+                  todayAttendance:
+                    type: integer
+                    example: 120
+                  attendanceRate:
+                    type: number
+                    format: float
+                    example: 80.5
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /dashboard/weekly-stats:
+    get:
+      tags:
+        - Dashboard
+      summary: Get weekly attendance statistics
+      description: Mendapatkan statistik kehadiran mingguan
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Weekly statistics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  weeklyData:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day:
+                          type: string
+                          example: "Monday"
+                        present:
+                          type: integer
+                          example: 120
+                        absent:
+                          type: integer
+                          example: 30
+
+  /dashboard/top-users:
+    get:
+      tags:
+        - Dashboard
+      summary: Get top attendance users
+      description: Mendapatkan daftar pengguna dengan kehadiran tertinggi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Jumlah pengguna yang ditampilkan
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Top users data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                      example: 123
+                    full_name:
+                      type: string
+                      example: "John Doe"
+                    attendance_count:
+                      type: integer
+                      example: 25
+                    attendance_rate:
+                      type: number
+                      format: float
+                      example: 96.2
+
+  /dashboard/location-stats:
+    get:
+      tags:
+        - Dashboard
+      summary: Get location attendance statistics
+      description: Mendapatkan statistik kehadiran per lokasi
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Location statistics data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    lokasi_id:
+                      type: integer
+                      example: 1
+                    nama_lokasi:
+                      type: string
+                      example: "Kantor Pusat"
+                    total_attendance:
+                      type: integer
+                      example: 500
+                    today_attendance:
+                      type: integer
+                      example: 25
+
+  /dashboard/realtime:
+    get:
+      tags:
+        - Dashboard
+      summary: Get real-time attendance stats
+      description: Mendapatkan statistik kehadiran real-time hari ini
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Real-time statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_expected:
+                    type: integer
+                    example: 150
+                  present:
+                    type: integer
+                    example: 120
+                  absent:
+                    type: integer
+                    example: 30
+                  on_leave:
+                    type: integer
+                    example: 5
+                  late:
+                    type: integer
+                    example: 15
+
+  # User Management Endpoints
+  /register:
+    post:
+      tags:
+        - User Management
+      summary: Register new user
+      description: Mendaftarkan pengguna baru (Super Admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - full_name
+                - email
+                - level
+              properties:
+                username:
+                  type: string
+                  example: "admin001"
+                password:
+                  type: string
+                  example: "securepassword"
+                full_name:
+                  type: string
+                  example: "John Doe"
+                email:
+                  type: string
+                  example: "admin@example.com"
+                level:
+                  type: string
+                  enum: ["1", "2", "3", "4"]
+                  example: "2"
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users:
+    get:
+      tags:
+        - User Management
+      summary: Get all users
+      description: Mendapatkan daftar semua pengguna dengan pagination
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+        - name: level
+          in: query
+          description: Filter berdasarkan level pengguna
+          schema:
+            type: string
+            enum: ["1", "2", "3", "4"]
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                        example: 1
+                      limit:
+                        type: integer
+                        example: 10
+                      total:
+                        type: integer
+                        example: 100
+                      totalPages:
+                        type: integer
+                        example: 10
+
+  /users/search:
+    get:
+      tags:
+        - User Management
+      summary: Search users
+      description: Mencari pengguna berdasarkan keyword
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Keyword pencarian (username, full_name, email)
+          schema:
+            type: string
+            example: "john"
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  pagination:
+                    type: object
+
+  /users/{id}:
+    get:
+      tags:
+        - User Management
+      summary: Get user by ID
+      description: Mendapatkan detail pengguna berdasarkan ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags:
+        - User Management
+      summary: Update user
+      description: Mengupdate data pengguna
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                  example: "John Doe Updated"
+                email:
+                  type: string
+                  example: "newemail@example.com"
+                is_active:
+                  type: boolean
+                  example: true
+                level:
+                  type: string
+                  enum: ["1", "2", "3", "4"]
+                  example: "2"
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/{userId}/force-logout:
+    post:
+      tags:
+        - User Management
+      summary: Force logout user
+      description: Memaksa logout pengguna dengan menghapus refresh token
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: User logged out successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User has been logged out successfully"
+
+  # Location Management Endpoints
+  /lokasi:
+    post:
+      tags:
+        - Location Management
+      summary: Create new location
+      description: Membuat lokasi baru untuk presensi
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nama_lokasi
+                - alamat
+                - latitude
+                - longitude
+                - radius
+              properties:
+                nama_lokasi:
+                  type: string
+                  example: "Kantor Pusat"
+                alamat:
+                  type: string
+                  example: "Jl. Sudirman No. 1"
+                latitude:
+                  type: number
+                  format: float
+                  example: -6.1944
+                longitude:
+                  type: number
+                  format: float
+                  example: 106.8229
+                radius:
+                  type: integer
+                  example: 100
+                id_skpd:
+                  type: string
+                  example: "01"
+                id_satker:
+                  type: string
+                  example: "001"
+                id_bidang:
+                  type: string
+                  example: "001"
+      responses:
+        '201':
+          description: Location created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lokasi'
+
+    get:
+      tags:
+        - Location Management
+      summary: Get all locations
+      description: Mendapatkan daftar semua lokasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of locations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Lokasi'
+                  pagination:
+                    type: object
+
+  /lokasi/search:
+    get:
+      tags:
+        - Location Management
+      summary: Search locations
+      description: Mencari lokasi berdasarkan keyword
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Keyword pencarian (nama_lokasi, alamat)
+          schema:
+            type: string
+            example: "kantor"
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Lokasi'
+
+  /lokasi/{lokasi_id}:
+    get:
+      tags:
+        - Location Management
+      summary: Get location by ID
+      description: Mendapatkan detail lokasi berdasarkan ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lokasi_id
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Location details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lokasi'
+
+    patch:
+      tags:
+        - Location Management
+      summary: Update location
+      description: Mengupdate data lokasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lokasi_id
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nama_lokasi:
+                  type: string
+                  example: "Kantor Pusat Updated"
+                alamat:
+                  type: string
+                  example: "Jl. Sudirman No. 2"
+                latitude:
+                  type: number
+                  format: float
+                  example: -6.1945
+                longitude:
+                  type: number
+                  format: float
+                  example: 106.8230
+                radius:
+                  type: integer
+                  example: 150
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lokasi'
+
+    delete:
+      tags:
+        - Location Management
+      summary: Delete location
+      description: Menghapus lokasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lokasi_id
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Location deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Location deleted successfully"
+
+  # Attendance Management Endpoints
+  /kehadiran:
+    get:
+      tags:
+        - Attendance Management
+      summary: Get all attendance records
+      description: Mendapatkan semua record kehadiran dengan filter
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+        - name: start_date
+          in: query
+          description: Tanggal mulai (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2025-01-01"
+        - name: end_date
+          in: query
+          description: Tanggal akhir (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2025-01-31"
+        - name: status
+          in: query
+          description: Filter berdasarkan status kehadiran
+          schema:
+            type: string
+            enum: ["HADIR", "izin", "sakit", "cuti", "dinas"]
+      responses:
+        '200':
+          description: List of attendance records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Kehadiran'
+                  pagination:
+                    type: object
+
+  /kehadiran/{id}:
+    get:
+      tags:
+        - Attendance Management
+      summary: Get attendance by ID
+      description: Mendapatkan detail kehadiran berdasarkan ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Attendance ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Attendance details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Kehadiran'
+
+  /kehadiran/user/{user_id}:
+    get:
+      tags:
+        - Attendance Management
+      summary: Get attendance by user ID
+      description: Mendapatkan kehadiran berdasarkan user ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: User ID
+          schema:
+            type: integer
+            example: 123
+        - name: start_date
+          in: query
+          description: Tanggal mulai
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: Tanggal akhir
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: User attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Kehadiran'
+
+  /kehadiran/monthly/filter:
+    get:
+      tags:
+        - Attendance Management
+      summary: Get monthly attendance with filter
+      description: Mendapatkan data kehadiran bulanan dengan filter
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: Bulan (1-12)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+            example: 1
+        - name: year
+          in: query
+          required: true
+          description: Tahun
+          schema:
+            type: integer
+            example: 2025
+        - name: skpd
+          in: query
+          description: Filter SKPD
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Monthly attendance data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: object
+                    properties:
+                      total_days:
+                        type: integer
+                        example: 31
+                      working_days:
+                        type: integer
+                        example: 22
+                      total_present:
+                        type: integer
+                        example: 450
+                      total_absent:
+                        type: integer
+                        example: 50
+                  details:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Kehadiran'
+
+  /kehadiran/monthly/summary:
+    get:
+      tags:
+        - Attendance Management
+      summary: Get monthly attendance summary
+      description: Mendapatkan ringkasan kehadiran bulanan per pengguna
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: Bulan (1-12)
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          description: Tahun
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Monthly summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: integer
+                      example: 123
+                    full_name:
+                      type: string
+                      example: "John Doe"
+                    total_present:
+                      type: integer
+                      example: 20
+                    total_absent:
+                      type: integer
+                      example: 2
+                    attendance_rate:
+                      type: number
+                      format: float
+                      example: 90.9
+
+  # Export Endpoints
+  /kehadiran/export/harian:
+    get:
+      tags:
+        - Export
+      summary: Export daily attendance
+      description: Export data presensi harian ke Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tanggal
+          in: query
+          required: true
+          description: Tanggal export (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+            example: "2025-01-01"
+        - name: skpd
+          in: query
+          description: Filter SKPD
+          schema:
+            type: string
+        - name: lokasi
+          in: query
+          description: Filter lokasi
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /kehadiran/export/bulanan:
+    get:
+      tags:
+        - Export
+      summary: Export monthly attendance
+      description: Export data presensi bulanan ke Excel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: Bulan (1-12)
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: true
+          description: Tahun
+          schema:
+            type: integer
+        - name: skpd
+          in: query
+          description: Filter SKPD
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Excel file
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  # Jam Dinas Management Endpoints
+  /jam-dinas:
+    get:
+      tags:
+        - Jam Dinas Management
+      summary: Get all jam dinas
+      description: Mendapatkan semua jam dinas
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of jam dinas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JamDinas'
+
+    post:
+      tags:
+        - Jam Dinas Management
+      summary: Create new jam dinas
+      description: Membuat jam dinas baru
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - nama_jam_dinas
+              properties:
+                nama_jam_dinas:
+                  type: string
+                  example: "Jam Kerja Normal"
+                deskripsi:
+                  type: string
+                  example: "Jam kerja untuk hari normal"
+                is_active:
+                  type: boolean
+                  example: true
+      responses:
+        '201':
+          description: Jam dinas created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JamDinas'
+
+  /jam-dinas/{id}:
+    get:
+      tags:
+        - Jam Dinas Management
+      summary: Get jam dinas by ID
+      description: Mendapatkan detail jam dinas berdasarkan ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Jam Dinas ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Jam dinas details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JamDinas'
+
+    put:
+      tags:
+        - Jam Dinas Management
+      summary: Update jam dinas
+      description: Mengupdate jam dinas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Jam Dinas ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nama_jam_dinas:
+                  type: string
+                  example: "Jam Kerja Normal Updated"
+                deskripsi:
+                  type: string
+                  example: "Updated description"
+                is_active:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Jam dinas updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JamDinas'
+
+    delete:
+      tags:
+        - Jam Dinas Management
+      summary: Delete jam dinas
+      description: Menghapus jam dinas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Jam Dinas ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Jam dinas deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Jam dinas deleted successfully"
+
+  # Jam Dinas Detail Endpoints
+  /jam-dinas-detail:
+    post:
+      tags:
+        - Jam Dinas Management
+      summary: Create jam dinas detail
+      description: Membuat detail jam dinas
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - jam_dinas_id
+                - hari
+                - tipe
+                - jam_masuk_mulai
+                - jam_masuk_selesai
+                - jam_pulang_mulai
+                - jam_pulang_selesai
+              properties:
+                jam_dinas_id:
+                  type: integer
+                  example: 1
+                hari:
+                  type: string
+                  enum: ["senin", "selasa", "rabu", "kamis", "jumat", "sabtu", "minggu"]
+                  example: "senin"
+                tipe:
+                  type: string
+                  enum: ["normal", "ramadhan"]
+                  example: "normal"
+                jam_masuk_mulai:
+                  type: string
+                  format: time
+                  example: "07:30:00"
+                jam_masuk_selesai:
+                  type: string
+                  format: time
+                  example: "08:30:00"
+                jam_pulang_mulai:
+                  type: string
+                  format: time
+                  example: "16:30:00"
+                jam_pulang_selesai:
+                  type: string
+                  format: time
+                  example: "17:30:00"
+      responses:
+        '201':
+          description: Jam dinas detail created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JamDinasDetail'
+
+  /jam-dinas-details/{id}:
+    put:
+      tags:
+        - Jam Dinas Management
+      summary: Update jam dinas detail
+      description: Mengupdate detail jam dinas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Jam Dinas Detail ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JamDinasDetail'
+      responses:
+        '200':
+          description: Jam dinas detail updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JamDinasDetail'
+
+    delete:
+      tags:
+        - Jam Dinas Management
+      summary: Delete jam dinas detail
+      description: Menghapus detail jam dinas
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Jam Dinas Detail ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Jam dinas detail deleted successfully
+
+  # Organization Assignment Endpoints
+  /jam-dinas/organization:
+    get:
+      tags:
+        - Organization Assignment
+      summary: Get organization assignments
+      description: Mendapatkan assignment jam dinas ke organisasi
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of organization assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      example: 1
+                    jam_dinas_id:
+                      type: integer
+                      example: 1
+                    id_skpd:
+                      type: string
+                      example: "01"
+                    id_satker:
+                      type: string
+                      example: "001"
+                    id_bidang:
+                      type: string
+                      example: "001"
+                    is_active:
+                      type: boolean
+                      example: true
+
+    post:
+      tags:
+        - Organization Assignment
+      summary: Create organization assignment
+      description: Membuat assignment jam dinas ke organisasi
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - jam_dinas_id
+              properties:
+                jam_dinas_id:
+                  type: integer
+                  example: 1
+                id_skpd:
+                  type: string
+                  example: "01"
+                id_satker:
+                  type: string
+                  example: "001"
+                id_bidang:
+                  type: string
+                  example: "001"
+      responses:
+        '201':
+          description: Organization assignment created successfully
+
+  /jam-dinas/organization/{id}:
+    get:
+      tags:
+        - Organization Assignment
+      summary: Get organization assignment by ID
+      description: Mendapatkan detail assignment organisasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Assignment ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Organization assignment details
+
+    put:
+      tags:
+        - Organization Assignment
+      summary: Update organization assignment
+      description: Mengupdate assignment organisasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Assignment ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jam_dinas_id:
+                  type: integer
+                  example: 1
+                id_skpd:
+                  type: string
+                  example: "01"
+                id_satker:
+                  type: string
+                  example: "001"
+                id_bidang:
+                  type: string
+                  example: "001"
+      responses:
+        '200':
+          description: Organization assignment updated successfully
+
+    delete:
+      tags:
+        - Organization Assignment
+      summary: Delete organization assignment
+      description: Menghapus assignment organisasi
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Assignment ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Organization assignment deleted successfully
+
+  /jam-dinas/organization/{id}/toggle-status:
+    patch:
+      tags:
+        - Organization Assignment
+      summary: Toggle assignment status
+      description: Mengubah status aktif/non-aktif assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Assignment ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Assignment status toggled successfully
+
+  # SKPD Hierarchy Endpoints
+  /skpd:
+    get:
+      tags:
+        - Organization Hierarchy
+      summary: Get all SKPD
+      description: Mendapatkan semua SKPD
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of SKPD
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    KDSKPD:
+                      type: string
+                      example: "01"
+                    NMSKPD:
+                      type: string
+                      example: "Dinas Pendidikan"
+                    STATUS:
+                      type: string
+                      example: "1"
+
+  /skpd/search:
+    get:
+      tags:
+        - Organization Hierarchy
+      summary: Search SKPD
+      description: Mencari SKPD berdasarkan keyword
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Keyword pencarian
+          schema:
+            type: string
+            example: "pendidikan"
+      responses:
+        '200':
+          description: Search results
+
+  /skpd/{kdskpd}:
+    get:
+      tags:
+        - Organization Hierarchy
+      summary: Get SKPD by code
+      description: Mendapatkan detail SKPD berdasarkan kode
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kdskpd
+          in: path
+          required: true
+          description: Kode SKPD
+          schema:
+            type: string
+            example: "01"
+      responses:
+        '200':
+          description: SKPD details
+
+  /skpd/{kdskpd}/satker:
+    get:
+      tags:
+        - Organization Hierarchy
+      summary: Get Satker by SKPD
+      description: Mendapatkan Satker berdasarkan SKPD
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kdskpd
+          in: path
+          required: true
+          description: Kode SKPD
+          schema:
+            type: string
+            example: "01"
+      responses:
+        '200':
+          description: List of Satker under SKPD
+
+  /skpd/{kdskpd}/satker/{kdsatker}/bidang:
+    get:
+      tags:
+        - Organization Hierarchy
+      summary: Get Bidang by Satker
+      description: Mendapatkan Bidang berdasarkan Satker
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kdskpd
+          in: path
+          required: true
+          description: Kode SKPD
+          schema:
+            type: string
+            example: "01"
+        - name: kdsatker
+          in: path
+          required: true
+          description: Kode Satker
+          schema:
+            type: string
+            example: "001"
+      responses:
+        '200':
+          description: List of Bidang under Satker
+
+  # Jadwal Kegiatan Endpoints
+  /kegiatan:
+    get:
+      tags:
+        - Jadwal Kegiatan
+      summary: Get all jadwal kegiatan
+      description: Mendapatkan semua jadwal kegiatan
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of jadwal kegiatan
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JadwalKegiatan'
+
+    post:
+      tags:
+        - Jadwal Kegiatan
+      summary: Create jadwal kegiatan
+      description: Membuat jadwal kegiatan baru
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tanggal_kegiatan
+                - jenis_kegiatan
+                - keterangan
+              properties:
+                tanggal_kegiatan:
+                  type: string
+                  format: date
+                  example: "2025-01-01"
+                jenis_kegiatan:
+                  type: string
+                  example: "Apel Gabungan"
+                keterangan:
+                  type: string
+                  example: "Kegiatan apel gabungan mingguan"
+      responses:
+        '201':
+          description: Jadwal kegiatan created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JadwalKegiatan'
+
+  /kegiatan/{id_kegiatan}:
+    get:
+      tags:
+        - Jadwal Kegiatan
+      summary: Get jadwal kegiatan by ID
+      description: Mendapatkan detail jadwal kegiatan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id_kegiatan
+          in: path
+          required: true
+          description: ID Kegiatan
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Jadwal kegiatan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JadwalKegiatan'
+
+    put:
+      tags:
+        - Jadwal Kegiatan
+      summary: Update jadwal kegiatan
+      description: Mengupdate jadwal kegiatan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id_kegiatan
+          in: path
+          required: true
+          description: ID Kegiatan
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tanggal_kegiatan:
+                  type: string
+                  format: date
+                  example: "2025-01-02"
+                jenis_kegiatan:
+                  type: string
+                  example: "Apel Gabungan Updated"
+                keterangan:
+                  type: string
+                  example: "Updated description"
+      responses:
+        '200':
+          description: Jadwal kegiatan updated successfully
+
+    delete:
+      tags:
+        - Jadwal Kegiatan
+      summary: Delete jadwal kegiatan
+      description: Menghapus jadwal kegiatan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id_kegiatan
+          in: path
+          required: true
+          description: ID Kegiatan
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Jadwal kegiatan deleted successfully
+
+  /jadwal-kegiatan/{id_kegiatan}/lokasi:
+    post:
+      tags:
+        - Jadwal Kegiatan
+      summary: Add location to kegiatan
+      description: Menambahkan lokasi ke jadwal kegiatan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id_kegiatan
+          in: path
+          required: true
+          description: ID Kegiatan
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - lokasi_id
+              properties:
+                lokasi_id:
+                  type: integer
+                  example: 1
+      responses:
+        '201':
+          description: Location added to kegiatan successfully
+
+  /jadwal-kegiatan/{id_kegiatan}/lokasi/{lokasi_id}:
+    delete:
+      tags:
+        - Jadwal Kegiatan
+      summary: Remove location from kegiatan
+      description: Menghapus lokasi dari jadwal kegiatan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id_kegiatan
+          in: path
+          required: true
+          description: ID Kegiatan
+          schema:
+            type: integer
+            example: 1
+        - name: lokasi_id
+          in: path
+          required: true
+          description: ID Lokasi
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Location removed from kegiatan successfully
+
+  # System Settings Endpoints
+  /system-settings:
+    get:
+      tags:
+        - System Settings
+      summary: Get all system settings
+      description: Mendapatkan semua pengaturan sistem
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of system settings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key:
+                      type: string
+                      example: "active_tipe_jadwal"
+                    value:
+                      type: string
+                      example: "normal"
+                    description:
+                      type: string
+                      example: "Tipe jadwal yang aktif saat ini"
+
+  /system-settings/tipe-jadwal:
+    get:
+      tags:
+        - System Settings
+      summary: Get current tipe jadwal
+      description: Mendapatkan tipe jadwal yang aktif saat ini
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current tipe jadwal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tipe:
+                    type: string
+                    enum: ["normal", "ramadhan"]
+                    example: "normal"
+
+    put:
+      tags:
+        - System Settings
+      summary: Update tipe jadwal
+      description: Mengupdate tipe jadwal global
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - tipe
+              properties:
+                tipe:
+                  type: string
+                  enum: ["normal", "ramadhan"]
+                  example: "ramadhan"
+      responses:
+        '200':
+          description: Tipe jadwal updated successfully
+
+  # Device Reset Management Endpoints
+  /device-reset-requests:
+    get:
+      tags:
+        - Device Reset Management
+      summary: Get all device reset requests
+      description: Mendapatkan semua permintaan reset device
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter berdasarkan status
+          schema:
+            type: string
+            enum: ["pending", "approved", "rejected"]
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: List of device reset requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeviceResetRequest'
+                  pagination:
+                    type: object
+
+  /device-reset-requests/{id}:
+    put:
+      tags:
+        - Device Reset Management
+      summary: Update device reset request status
+      description: Mengupdate status permintaan reset device
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request ID
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: ["approved", "rejected"]
+                  example: "approved"
+                admin_response:
+                  type: string
+                  example: "Request disetujui"
+      responses:
+        '200':
+          description: Device reset request updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResetRequest'
+
+  # Admin Logs Management Endpoints
+  /admin-logs:
+    get:
+      tags:
+        - Admin Logs
+      summary: Get all admin logs
+      description: Mendapatkan semua log aktivitas admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman
+          schema:
+            type: integer
+            default: 10
+        - name: action
+          in: query
+          description: Filter berdasarkan aksi
+          schema:
+            type: string
+            enum: ["CREATE", "READ", "UPDATE", "DELETE", "LOGIN", "LOGOUT"]
+        - name: resource
+          in: query
+          description: Filter berdasarkan resource
+          schema:
+            type: string
+        - name: start_date
+          in: query
+          description: Tanggal mulai
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          description: Tanggal akhir
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: List of admin logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminLog'
+                  pagination:
+                    type: object
+
+  /admin-logs/{id}:
+    get:
+      tags:
+        - Admin Logs
+      summary: Get admin log by ID
+      description: Mendapatkan detail log admin berdasarkan ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Log ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Admin log details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLog'
+
+  /admin-logs/admin/{adminId}:
+    get:
+      tags:
+        - Admin Logs
+      summary: Get logs by admin ID
+      description: Mendapatkan log berdasarkan admin ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: adminId
+          in: path
+          required: true
+          description: Admin ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Admin logs for specific admin
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminLog'
+
+  /admin-logs/stats:
+    get:
+      tags:
+        - Admin Logs
+      summary: Get admin logs statistics
+      description: Mendapatkan statistik log admin
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Admin logs statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_logs:
+                    type: integer
+                    example: 1000
+                  today_logs:
+                    type: integer
+                    example: 50
+                  top_actions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        action:
+                          type: string
+                          example: "CREATE"
+                        count:
+                          type: integer
+                          example: 200
+                  top_resources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        resource:
+                          type: string
+                          example: "users"
+                        count:
+                          type: integer
+                          example: 150
+
+  /admin-logs/cleanup:
+    delete:
+      tags:
+        - Admin Logs
+      summary: Cleanup old admin logs
+      description: Menghapus log admin yang lama
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                days:
+                  type: integer
+                  example: 90
+                  description: Hapus log yang lebih lama dari X hari
+      responses:
+        '200':
+          description: Old logs deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Deleted 500 old logs"
+                  deleted_count:
+                    type: integer
+                    example: 500
+
+tags:
+  - name: Dashboard
+    description: Endpoints untuk dashboard dan statistik
+  - name: User Management
+    description: Manajemen pengguna sistem
+  - name: Location Management
+    description: Manajemen lokasi presensi
+  - name: Attendance Management
+    description: Manajemen data kehadiran
+  - name: Export
+    description: Export data ke Excel
+  - name: Jam Dinas Management
+    description: Manajemen jam dinas dan jadwal kerja
+  - name: Organization Assignment
+    description: Assignment jam dinas ke organisasi
+  - name: Organization Hierarchy
+    description: Hierarki organisasi (SKPD, Satker, Bidang)
+  - name: Jadwal Kegiatan
+    description: Manajemen jadwal kegiatan
+  - name: System Settings
+    description: Pengaturan sistem
+  - name: Device Reset Management
+    description: Manajemen permintaan reset device
+  - name: Admin Logs
+    description: Log aktivitas admin

@@ -59,6 +59,7 @@ const updateGlobalTipeJadwal = async (req, res) => {
 
 // Get current active tipe jadwal
 const getCurrentTipeJadwal = async (req, res) => {
+    console.log('Fetching current active tipe jadwal');
     try {
         const setting = await SystemSetting.findOne({
             where: { key: 'active_tipe_jadwal' }

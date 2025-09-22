@@ -118,13 +118,45 @@ const createLokasi = async (req, res) => {
 
 const getLokasi = async (req, res) => {
   try {
-    //use pagination
+    const { search } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    //ambil semua data
+    // Build where condition
+    let whereCondition = {};
+    
+    // Jika ada parameter search, tambahkan kondisi pencarian
+    if (search) {
+      whereCondition = {
+        [Op.or]: [
+          {
+            ket: {
+              [Op.like]: `%${search}%`
+            }
+          },
+          {
+            id_skpd: {
+              [Op.like]: `%${search}%`
+            }
+          },
+          {
+            id_satker: {
+              [Op.like]: `%${search}%`
+            }
+          },
+          {
+            id_bidang: {
+              [Op.like]: `%${search}%`
+            }
+          }
+        ]
+      };
+    }
+
+    // Ambil data lokasi dengan atau tanpa filter pencarian
     const lokasis = await Lokasi.findAll({
+      where: whereCondition,
       offset,
       limit,
     });
@@ -134,7 +166,10 @@ const getLokasi = async (req, res) => {
       lokasis.map(async (loc) => await getOrganizationData(loc))
     );
 
-    const totalItems = await Lokasi.count();
+    // Hitung total data
+    const totalItems = await Lokasi.count({
+      where: whereCondition
+    });
     const totalPages = Math.ceil(totalItems / limit);
 
     const pagination = {
@@ -144,7 +179,12 @@ const getLokasi = async (req, res) => {
       itemsPerPage: limit,
     };
 
+    const message = search 
+      ? `Ditemukan ${lokasisWithOrgData.length} lokasi untuk pencarian "${search}"`
+      : "Data lokasi berhasil diambil";
+
     return res.status(200).json({
+      message,
       data: lokasisWithOrgData,
       pagination,
     });
@@ -228,120 +268,11 @@ const deleteLokasi = async (req, res) => {
   }
 };
 
-// Search lokasi berdasarkan ket (keterangan)
-const searchLokasi = async (req, res) => {
-  try {
-    const { query } = req.query;
-    
-    if (!query) {
-      return res.status(400).json({ message: "Query pencarian harus diisi" });
-    }
-
-    // Ambil parameter pagination dari query
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    // Cari lokasi berdasarkan ket (keterangan), id_skpd, id_satker, atau id_bidang
-    const lokasis = await Lokasi.findAll({
-      where: {
-        [Sequelize.Op.or]: [
-          {
-            ket: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_skpd: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_satker: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_bidang: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          }
-        ]
-      },
-      limit: limit,
-      offset: offset,
-    });
-
-    // Tambahkan data organisasi untuk setiap lokasi
-    const lokasisWithOrgData = await Promise.all(
-      lokasis.map(async (loc) => await getOrganizationData(loc))
-    );
-
-    // Hitung total data untuk informasi pagination
-    const totalItems = await Lokasi.count({
-      where: {
-        [Sequelize.Op.or]: [
-          {
-            ket: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_skpd: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_satker: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          },
-          {
-            id_bidang: {
-              [Sequelize.Op.like]: `%${query}%`
-            }
-          }
-        ]
-      }
-    });
-    
-    const totalPages = Math.ceil(totalItems / limit);
-
-    if (lokasisWithOrgData.length === 0) {
-      return res.status(404).json({ 
-        message: "Lokasi tidak ditemukan",
-        data: [],
-        pagination: {
-          totalItems: 0,
-          totalPages: 0,
-          currentPage: page,
-          itemsPerPage: limit
-        }
-      });
-    }
-
-    return res.status(200).json({
-      message: `Ditemukan ${lokasisWithOrgData.length} lokasi`,
-      data: lokasisWithOrgData,
-      pagination: {
-        totalItems,
-        totalPages,
-        currentPage: page,
-        itemsPerPage: limit
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
-  }
-};
-
 module.exports = { 
   getMyLocation,
   createLokasi, 
   getLokasi, 
   getLokasiById, 
   updateLokasi, 
-  deleteLokasi, 
-  searchLokasi 
+  deleteLokasi
 };

@@ -30,16 +30,16 @@ const getUser = async (req, res) => {
 
 const getAllUser = async (req, res) => {
   try {
-    // Ambil parameter pagination dari query
+    // Ambil parameter pagination dan search dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const { search } = req.query; // Support search parameter
     
     // Ambil level user dari request (req.user.level)
     const userLevel = req.user.level;
-    console.log("Level user:", userLevel);
-    
     let id_skpd;
+    console.log(userLevel,"<<<<<<<<<<<<<<<<<<<<<<");
 
     if (userLevel === '1') {
       id_skpd = req.query.id_skpd;
@@ -55,23 +55,16 @@ const getAllUser = async (req, res) => {
       id_skpd = getSkpdIdByUserLevel(user, userLevel);
     }
 
-    console.log(id_skpd,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+    console.log(id_skpd,"<<<<<<<s<<<<<<<<<<<<<<<<<<<<<<");
 
     let totalUsers;
     let users;
 
-    if (id_skpd) {
-      // Ambil data master terlebih dahulu untuk filter
-      const pegawaiWithSkpd = await MstPegawai.findAll({
-        where: { KDSKPD: id_skpd },
-        attributes: ['NIP']
-      });
-
-      // Buat array NIP yang valid untuk filter
-      const validNips = pegawaiWithSkpd.map(p => p.NIP);
+    // Jika ada search query, gunakan search function
+    if (search) {
+      users = await searchUsersWithMasterData(search, id_skpd, { limit, offset, order: [['id', 'DESC']] });
       
-      if (validNips.length === 0) {
-        // Jika tidak ada data master, return empty
+      if (users.length === 0) {
         return res.json({
           data: [],
           pagination: {
@@ -80,41 +73,78 @@ const getAllUser = async (req, res) => {
             currentPage: page,
             itemsPerPage: limit
           },
-          filter: { id_skpd }
+          filter: id_skpd ? { id_skpd } : null,
+          searchQuery: search
         });
       }
 
-      // Hitung total user yang memiliki NIP valid
-      totalUsers = await User.count({
-        where: {
-          username: validNips
-        }
-      });
-
-      // Ambil user dengan pagination
-      const userList = await User.findAll({
-        where: {
-          username: validNips
-        },
-        attributes: { exclude: ["password_hash"] },
-        limit: limit,
-        offset: offset,
-      });
-
-      // Map dengan data master menggunakan utility
-      users = await mapUsersWithMasterData(userList);
-
+      // For search, we'll approximate total count
+      totalUsers = users.length; // This is an approximation for pagination
+      
     } else {
-      // Tanpa filter - ambil semua data dengan pagination
-      totalUsers = await User.count();
-      const userList = await User.findAll({
-        attributes: { exclude: ["password_hash"] },
-        limit: limit,
-        offset: offset,
-      });
+      // Normal get all logic
+      if (id_skpd) {
+        // Ambil data master terlebih dahulu untuk filter
+        const pegawaiWithSkpd = await MstPegawai.findAll({
+          where: { KDSKPD: id_skpd },
+          attributes: ['NIP']
+        });
 
-      // Map dengan data master menggunakan utility
-      users = await mapUsersWithMasterData(userList);
+        // Buat array NIP yang valid untuk filter
+        const validNips = pegawaiWithSkpd.map(p => p.NIP);
+        
+        if (validNips.length === 0) {
+          // Jika tidak ada data master, return empty
+          return res.json({
+            data: [],
+            pagination: {
+              totalItems: 0,
+              totalPages: 0,
+              currentPage: page,
+              itemsPerPage: limit
+            },
+            filter: { id_skpd }
+          });
+        }
+
+        // Hitung total user yang memiliki NIP valid
+        totalUsers = await User.count({
+          where: {
+            username: {
+              [Op.in]: validNips
+            }
+          }
+        });
+
+        // Ambil user dengan pagination dan urutkan DESC
+        const userList = await User.findAll({
+          where: {
+            username: {
+              [Op.in]: validNips
+            }
+          },
+          attributes: { exclude: ["password_hash"] },
+          limit: limit,
+          offset: offset,
+          order: [['id', 'DESC']],
+        });
+
+        // Map dengan data master menggunakan utility
+        users = await mapUsersWithMasterData(userList);
+
+      } else {
+        // Tanpa filter - ambil semua data dengan pagination dan urutkan DESC
+        totalUsers = await User.count();
+        const userList = await User.findAll({
+          attributes: { exclude: ["password_hash"] },
+          limit: limit,
+          offset: offset,
+          order: [['id', 'DESC']],
+        });
+
+        // Map dengan data master menggunakan utility
+        users = await mapUsersWithMasterData(userList);
+      }
     }
 
     const totalPages = Math.ceil(totalUsers / limit);
@@ -128,33 +158,11 @@ const getAllUser = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      filter: id_skpd ? { id_skpd } : null
+      filter: id_skpd ? { id_skpd } : null,
+      searchQuery: search || null
     });
   } catch (error) {
     console.error('GetAllUser Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-//search user by username || email
-const searchUsers = async (req, res) => {
-  try {
-    const { query, id_skpd } = req.query;
-    
-    // Gunakan utility untuk search dengan master data
-    const usersWithMasterData = await searchUsersWithMasterData(query, id_skpd);
-
-    if (usersWithMasterData.length === 0) {
-      return res.status(404).json({ error: "User tidak ditemukan" });
-    }
-
-    res.json({
-      data: usersWithMasterData,
-      filter: id_skpd ? { id_skpd } : null
-    });
-  } 
-  catch (error) {
-    console.error('SearchUsers Error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -424,4 +432,4 @@ const getMyLocation = async (req, res) => {
   }
 };
 
-module.exports = { getUser, getAllUser, getUserById, updateUser, updateUserByAdmin, searchUsers, searchUsersOpd, saveFcmToken, resetDeviceId, getMyLocation };
+module.exports = { getUser, getAllUser, getUserById, updateUser, updateUserByAdmin, searchUsersOpd, saveFcmToken, resetDeviceId, getMyLocation };

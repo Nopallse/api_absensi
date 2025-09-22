@@ -7,13 +7,11 @@ const {
   getLokasi,
   getLokasiById,
   updateLokasi,
-  deleteLokasi,
-  searchLokasi
+  deleteLokasi
 } = require("../controllers/lokasiController");
 
 // Routes untuk user biasa
 router.get("/my-location", requireAuth(), getMyLocation);
-router.get("/search", requireAuth(), searchLokasi);
 router.get("/:lokasi_id", requireAuth(), getLokasiById);
 
 // Routes untuk admin (OPD dan Super Admin)

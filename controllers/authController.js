@@ -292,8 +292,6 @@ const loginAdmin = async (req, res) => {
   try {
     const { username, password } = req.body;
     console.log(req.body);
-    console.log(req.headers.device_id);
-    console.log(req.headers);
     
     // Find user with related admin data
     const user = await User.findOne({ 
@@ -309,6 +307,7 @@ const loginAdmin = async (req, res) => {
         }
       ]
     });
+    console.log(user);
     
     if (!user) {
       return res.status(401).json({ error: "Username atau password salah" });

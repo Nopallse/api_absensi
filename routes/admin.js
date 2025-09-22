@@ -8,11 +8,9 @@ const {
   getLokasiById,
   updateLokasi,
   deleteLokasi,
-  searchLokasi,
 } = require("../controllers/lokasiController");
 const { register, forceLogoutUser } = require("../controllers/authController");
 const { getUserById, getAllUser, searchUsers, updateUserByAdmin } = require("../controllers/userController");
-const {  getDetailKetidakhadiran, updateKetidakhadiranStatus, getAllKetidakhadiran } = require("../controllers/ketidakhadiranController");
 const { getAllKehadiran, getKehadiranByUserId, getKehadiranById, getMonthlyAttendanceByFilter, getMonthlyAttendanceSummaryByUser } = require("../controllers/kehadiranController");
 const { 
     getDashboardOverview, 
@@ -40,18 +38,17 @@ const {
     deleteOrganizationAssignment,
     toggleOrganizationAssignmentStatus
 } = require("../controllers/jamDinasController");
-const { getAllSkpd, searchSkpd, getSkpdById, getSkpdByStatus } = require("../controllers/skpdController");
+const { getAllSkpd, getSkpdById, getSkpdByStatus } = require("../controllers/skpdController");
 const { getAllSatker, searchSatker, getSatkerById, getSatkerBySkpd } = require("../controllers/satkerController");
 const { getAllBidang, searchBidang, getBidangById, getBidangBySatker } = require("../controllers/bidangController");
 const { 
   getSatkerBySkpdHierarchy,
-  searchSatkerInSkpd,
+
   getSatkerByIdInSkpd,
   getBidangBySatkerInSkpd,
-  searchBidangInSatker,
   getBidangByIdInSatker
 } = require("../controllers/hierarchyController");
-const { getAllJadwalKegiatan, createJadwalKegiatan, getJadwalKegiatanById, updateJadwalKegiatan, deleteJadwalKegiatan, addLokasiToKegiatan, getLokasiKegiatan, removeLokasiFromKegiatan    } = require("../controllers/jadwalKegiatanController");
+const { getAllJadwalKegiatan, createJadwalKegiatan, getJadwalKegiatanById, updateJadwalKegiatan, deleteJadwalKegiatan, addLokasiToKegiatan, getLokasiKegiatan, removeLokasiFromKegiatan, editLokasiKegiatan, editSkpdKegiatanLokasi } = require("../controllers/jadwalKegiatanController");
 const { addSkpdToKegiatanLokasi, removeSkpdFromKegiatanLokasi } = require("../controllers/jadwalKegiatanLokasiSkpdController");
 const { getAllSettings, updateGlobalTipeJadwal, getCurrentTipeJadwal } = require("../controllers/systemSettingController");
 const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
@@ -79,7 +76,6 @@ router.get("/dashboard/realtime", requireSuperAdmin(), getTodayRealTimeStats);
 
 // User management
 router.get("/users", requireSuperAdmin(), getAllUser);
-router.get("/users/search", requireSuperAdmin(), searchUsers);
 router.get("/users/:id", requireSuperAdmin(), getUserById);
 router.patch("/users/:id", 
   requireSuperAdmin(), 
@@ -103,36 +99,35 @@ router.post("/users/:userId/force-logout",
 
 
 // Lokasi management
-router.post("/lokasi", 
-  requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'CREATE', 
-    resource: 'lokasi',
-    getDescription: (req) => `Create new location: ${req.body.nama_lokasi}`
-  }),
-  createLokasi
-);
-router.get("/lokasi", requireSuperAdmin(), getLokasi);
-router.get("/lokasi/search", requireSuperAdmin(), searchLokasi);
-router.get("/lokasi/:lokasi_id", requireSuperAdmin(), getLokasiById);
-router.patch("/lokasi/:lokasi_id", 
-  requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'UPDATE', 
-    resource: 'lokasi',
-    getDescription: (req) => `Update location ID: ${req.params.lokasi_id}`
-  }),
-  updateLokasi
-);
-router.delete("/lokasi/:lokasi_id", 
-  requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'DELETE', 
-    resource: 'lokasi',
-    getDescription: (req) => `Delete location ID: ${req.params.lokasi_id}`
-  }),
-  deleteLokasi
-);
+  router.post("/lokasi", 
+    requireSuperAdmin(), 
+    adminLogMiddleware({ 
+      action: 'CREATE', 
+      resource: 'lokasi',
+      getDescription: (req) => `Create new location: ${req.body.nama_lokasi}`
+    }),
+    createLokasi
+  );
+  router.get("/lokasi", requireSuperAdmin(), getLokasi);
+  router.get("/lokasi/:lokasi_id", requireSuperAdmin(), getLokasiById);
+  router.patch("/lokasi/:lokasi_id", 
+    requireSuperAdmin(), 
+    adminLogMiddleware({ 
+      action: 'UPDATE', 
+      resource: 'lokasi',
+      getDescription: (req) => `Update location ID: ${req.params.lokasi_id}`
+    }),
+    updateLokasi
+  );
+  router.delete("/lokasi/:lokasi_id", 
+    requireSuperAdmin(), 
+    adminLogMiddleware({ 
+      action: 'DELETE', 
+      resource: 'lokasi',
+      getDescription: (req) => `Delete location ID: ${req.params.lokasi_id}`
+    }),
+    deleteLokasi
+  );
 
 // Kehadiran management
 router.get("/kehadiran", requireSuperAdmin(), getAllKehadiran);
@@ -275,18 +270,15 @@ router.delete("/jam-dinas-details/:id",
 
 
 router.get("/skpd", requireSuperAdmin(), getAllSkpd);
-router.get("/skpd/search", requireSuperAdmin(), searchSkpd);
 router.get("/skpd/status", requireSuperAdmin(), getSkpdByStatus);
 router.get("/skpd/:kdskpd", requireSuperAdmin(), getSkpdById);
 
 // Level 2: SKPD -> Satker (Second Level)
 router.get("/skpd/:kdskpd/satker", requireSuperAdmin(), getSatkerBySkpdHierarchy);
-router.get("/skpd/:kdskpd/satker/search", requireSuperAdmin(), searchSatkerInSkpd);
 router.get("/skpd/:kdskpd/satker/:kdsatker", requireSuperAdmin(), getSatkerByIdInSkpd);
 
 // Level 3: SKPD -> Satker -> Bidang (Third Level)
 router.get("/skpd/:kdskpd/satker/:kdsatker/bidang", requireSuperAdmin(), getBidangBySatkerInSkpd);
-router.get("/skpd/:kdskpd/satker/:kdsatker/bidang/search", requireSuperAdmin(), searchBidangInSatker);
 router.get("/skpd/:kdskpd/satker/:kdsatker/bidang/:bidangf", requireSuperAdmin(), getBidangByIdInSatker);
 
 // Alternative flat structure for backward compatibility
@@ -367,6 +359,27 @@ router.delete('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id',
     getDescription: (req) => `Remove location from kegiatan ID: ${req.params.id_kegiatan}`
   }),
   removeLokasiFromKegiatan
+);
+
+// Edit routes untuk jadwal kegiatan
+router.put('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id/edit', 
+  requireSuperAdmin(), 
+  adminLogMiddleware({ 
+    action: 'UPDATE', 
+    resource: 'jadwal_kegiatan_lokasi',
+    getDescription: (req) => `Edit location for kegiatan ID: ${req.params.id_kegiatan}`
+  }),
+  editLokasiKegiatan
+);
+
+router.put('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id/skpd', 
+  requireSuperAdmin(), 
+  adminLogMiddleware({ 
+    action: 'UPDATE', 
+    resource: 'jadwal_kegiatan_lokasi_skpd',
+    getDescription: (req) => `Edit SKPD list for kegiatan-lokasi ID: ${req.params.id_kegiatan}-${req.params.lokasi_id}`
+  }),
+  editSkpdKegiatanLokasi
 );
 
 // System Settings Management

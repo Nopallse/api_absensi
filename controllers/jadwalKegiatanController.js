@@ -371,8 +371,18 @@ const addLokasiToKegiatan = async (req, res) => {
             });
         }
         
+        // Convert to proper types
+        const kegiatanId = parseInt(id_kegiatan);
+        const lokasiId = parseInt(lokasi_id);
+        
+        console.log('Input values:', {
+            id_kegiatan: kegiatanId,
+            lokasi_id: lokasiId,
+            kdskpd_list
+        });
+        
         // Cek apakah jadwal kegiatan ada
-        const jadwal = await MasterJadwalKegiatan.findByPk(id_kegiatan);
+        const jadwal = await MasterJadwalKegiatan.findByPk(kegiatanId);
         if (!jadwal) {
             return res.status(404).json({
                 success: false,
@@ -381,7 +391,8 @@ const addLokasiToKegiatan = async (req, res) => {
         }
         
         // Cek apakah lokasi ada
-        const lokasi = await Lokasi.findByPk(lokasi_id);
+        console.log('Checking lokasi with ID:', lokasiId);
+        const lokasi = await Lokasi.findByPk(lokasiId);
         if (!lokasi) {
             return res.status(404).json({
                 success: false,
@@ -389,40 +400,56 @@ const addLokasiToKegiatan = async (req, res) => {
             });
         }
         
-        // Cek apakah sudah ada relasi untuk lokasi ini
-        const existingRelasi = await JadwalKegiatanLokasiSkpd.findOne({
-            where: { id_kegiatan, lokasi_id }
+        // Debug: tampilkan SKPD yang sudah ada untuk lokasi ini
+        const currentSkpd = await JadwalKegiatanLokasiSkpd.findAll({
+            where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId },
+            attributes: ['kdskpd']
         });
-        
-        if (existingRelasi) {
-            return res.status(400).json({
-                success: false,
-                error: 'Lokasi sudah ditambahkan ke jadwal kegiatan ini'
-            });
-        }
+        console.log('Current SKPD for this location:', currentSkpd.map(s => s.kdskpd));
         
         // Tambahkan SKPD ke lokasi kegiatan
         const relasiList = [];
+        const existingSkpd = [];
+        
         for (const kdskpd of kdskpd_list) {
             try {
+                console.log(`Processing SKPD: ${kdskpd}`);
+                
+                // Cek apakah kombinasi id_kegiatan, lokasi_id, dan kdskpd sudah ada
+                const existingRelasi = await JadwalKegiatanLokasiSkpd.findOne({
+                    where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId, kdskpd }
+                });
+                
+                if (existingRelasi) {
+                    existingSkpd.push(kdskpd);
+                    console.log(`SKPD ${kdskpd} sudah ada untuk lokasi ini`);
+                    continue;
+                }
+                
+                console.log(`Creating new relation for SKPD: ${kdskpd}`);
                 const relasi = await JadwalKegiatanLokasiSkpd.create({
-                    id_kegiatan,
-                    lokasi_id,
+                    id_kegiatan: kegiatanId,
+                    lokasi_id: lokasiId,
                     kdskpd
                 });
                 relasiList.push(relasi);
+                console.log(`SKPD ${kdskpd} berhasil ditambahkan dengan ID: ${relasi.id}`);
             } catch (error) {
                 // Jika ada error (misal duplikasi), skip
-                console.log(`SKPD ${kdskpd} sudah ada atau error:`, error.message);
+                console.log(`SKPD ${kdskpd} error:`, error.message);
+                console.log('Full error:', error);
+                existingSkpd.push(kdskpd);
             }
         }
         
         res.status(201).json({
             success: true,
-            message: 'Lokasi berhasil ditambahkan ke jadwal kegiatan',
+            message: relasiList.length > 0 
+                ? 'Lokasi berhasil ditambahkan ke jadwal kegiatan' 
+                : 'Semua SKPD sudah ada untuk lokasi ini',
             data: {
-                id_kegiatan,
-                lokasi_id,
+                id_kegiatan: kegiatanId,
+                lokasi_id: lokasiId,
                 lokasi_info: {
                     lokasi_id: lokasi.lokasi_id,
                     ket: lokasi.ket,
@@ -430,7 +457,14 @@ const addLokasiToKegiatan = async (req, res) => {
                     lng: lokasi.lng
                 },
                 skpd_added: relasiList.length,
-                skpd_list: relasiList.map(r => r.kdskpd)
+                skpd_list: relasiList.map(r => r.kdskpd),
+                existing_skpd: existingSkpd.length > 0 ? existingSkpd : undefined,
+                total_requested: kdskpd_list.length,
+                summary: {
+                    success: relasiList.length,
+                    already_exists: existingSkpd.length,
+                    total: kdskpd_list.length
+                }
             }
         });
     } catch (error) {
@@ -488,6 +522,221 @@ const removeLokasiFromKegiatan = async (req, res) => {
     }
 };
 
+// Edit/Update lokasi pada jadwal kegiatan
+const editLokasiKegiatan = async (req, res) => {
+    try {
+        const { id_kegiatan, lokasi_id } = req.params;
+        const { new_lokasi_id } = req.body;
+        
+        // Validasi input
+        if (!new_lokasi_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'new_lokasi_id harus diisi'
+            });
+        }
+        
+        const kegiatanId = parseInt(id_kegiatan);
+        const oldLokasiId = parseInt(lokasi_id);
+        const newLokasiId = parseInt(new_lokasi_id);
+        
+        // Cek apakah jadwal kegiatan ada
+        const jadwal = await MasterJadwalKegiatan.findByPk(kegiatanId);
+        if (!jadwal) {
+            return res.status(404).json({
+                success: false,
+                error: 'Jadwal kegiatan tidak ditemukan'
+            });
+        }
+        
+        // Cek apakah lokasi lama ada
+        const oldLokasi = await Lokasi.findByPk(oldLokasiId);
+        if (!oldLokasi) {
+            return res.status(404).json({
+                success: false,
+                error: 'Lokasi lama tidak ditemukan'
+            });
+        }
+        
+        // Cek apakah lokasi baru ada
+        const newLokasi = await Lokasi.findByPk(newLokasiId);
+        if (!newLokasi) {
+            return res.status(404).json({
+                success: false,
+                error: 'Lokasi baru tidak ditemukan'
+            });
+        }
+        
+        // Cek apakah ada relasi dengan lokasi lama
+        const existingRelations = await JadwalKegiatanLokasiSkpd.findAll({
+            where: { id_kegiatan: kegiatanId, lokasi_id: oldLokasiId }
+        });
+        
+        if (existingRelations.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Tidak ada relasi dengan lokasi lama yang ditemukan'
+            });
+        }
+        
+        // Cek apakah lokasi baru sudah digunakan untuk kegiatan ini
+        const existingNewRelations = await JadwalKegiatanLokasiSkpd.findAll({
+            where: { id_kegiatan: kegiatanId, lokasi_id: newLokasiId }
+        });
+        
+        if (existingNewRelations.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Lokasi baru sudah digunakan untuk kegiatan ini'
+            });
+        }
+        
+        // Update semua relasi dari lokasi lama ke lokasi baru
+        const updatedCount = await JadwalKegiatanLokasiSkpd.update(
+            { lokasi_id: newLokasiId },
+            { where: { id_kegiatan: kegiatanId, lokasi_id: oldLokasiId } }
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: 'Lokasi kegiatan berhasil diupdate',
+            data: {
+                id_kegiatan: kegiatanId,
+                old_lokasi: {
+                    lokasi_id: oldLokasiId,
+                    ket: oldLokasi.ket
+                },
+                new_lokasi: {
+                    lokasi_id: newLokasiId,
+                    ket: newLokasi.ket,
+                    lat: newLokasi.lat,
+                    lng: newLokasi.lng
+                },
+                updated_relations: updatedCount[0],
+                affected_skpd: existingRelations.map(r => r.kdskpd)
+            }
+        });
+    } catch (error) {
+        console.error('Edit Lokasi Kegiatan Error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            message: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// Edit/Update daftar SKPD untuk kombinasi kegiatan-lokasi
+const editSkpdKegiatanLokasi = async (req, res) => {
+    try {
+        const { id_kegiatan, lokasi_id } = req.params;
+        const { kdskpd_list } = req.body;
+        
+        // Validasi input
+        if (!kdskpd_list || !Array.isArray(kdskpd_list)) {
+            return res.status(400).json({
+                success: false,
+                error: 'kdskpd_list (array) harus diisi'
+            });
+        }
+        
+        const kegiatanId = parseInt(id_kegiatan);
+        const lokasiId = parseInt(lokasi_id);
+        
+        console.log('Edit SKPD - Input values:', {
+            id_kegiatan: kegiatanId,
+            lokasi_id: lokasiId,
+            kdskpd_list
+        });
+        
+        // Cek apakah jadwal kegiatan ada
+        const jadwal = await MasterJadwalKegiatan.findByPk(kegiatanId);
+        if (!jadwal) {
+            return res.status(404).json({
+                success: false,
+                error: 'Jadwal kegiatan tidak ditemukan'
+            });
+        }
+        
+        // Cek apakah lokasi ada
+        const lokasi = await Lokasi.findByPk(lokasiId);
+        if (!lokasi) {
+            return res.status(404).json({
+                success: false,
+                error: 'Lokasi tidak ditemukan'
+            });
+        }
+        
+        // Ambil SKPD yang sudah ada untuk kombinasi ini
+        const currentSkpd = await JadwalKegiatanLokasiSkpd.findAll({
+            where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
+        });
+        
+        const currentSkpdList = currentSkpd.map(s => s.kdskpd);
+        console.log('Current SKPD:', currentSkpdList);
+        console.log('New SKPD:', kdskpd_list);
+        
+        // Hapus semua SKPD yang sudah ada
+        const deletedCount = await JadwalKegiatanLokasiSkpd.destroy({
+            where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
+        });
+        
+        console.log('Deleted relations count:', deletedCount);
+        
+        // Tambahkan SKPD baru
+        const newRelations = [];
+        const failedSkpd = [];
+        
+        for (const kdskpd of kdskpd_list) {
+            try {
+                console.log(`Creating relation for SKPD: ${kdskpd}`);
+                const relasi = await JadwalKegiatanLokasiSkpd.create({
+                    id_kegiatan: kegiatanId,
+                    lokasi_id: lokasiId,
+                    kdskpd
+                });
+                newRelations.push(relasi);
+                console.log(`SKPD ${kdskpd} berhasil ditambahkan dengan ID: ${relasi.id}`);
+            } catch (error) {
+                console.log(`SKPD ${kdskpd} error:`, error.message);
+                failedSkpd.push(kdskpd);
+            }
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: 'Daftar SKPD berhasil diupdate',
+            data: {
+                id_kegiatan: kegiatanId,
+                lokasi_id: lokasiId,
+                lokasi_info: {
+                    lokasi_id: lokasi.lokasi_id,
+                    ket: lokasi.ket,
+                    lat: lokasi.lat,
+                    lng: lokasi.lng
+                },
+                previous_skpd: currentSkpdList,
+                new_skpd: newRelations.map(r => r.kdskpd),
+                failed_skpd: failedSkpd.length > 0 ? failedSkpd : undefined,
+                summary: {
+                    previous_count: currentSkpdList.length,
+                    deleted_count: deletedCount,
+                    new_count: newRelations.length,
+                    failed_count: failedSkpd.length,
+                    total_requested: kdskpd_list.length
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Edit SKPD Kegiatan Lokasi Error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            message: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
     getJadwalHariIni,
     getAllJadwalKegiatan,
@@ -498,5 +747,7 @@ module.exports = {
     getJadwalKegiatanByRange,
     getLokasiKegiatan,
     addLokasiToKegiatan,
-    removeLokasiFromKegiatan
+    removeLokasiFromKegiatan,
+    editLokasiKegiatan,
+    editSkpdKegiatanLokasi
 }; 

@@ -23,6 +23,7 @@ const mapUsersWithMasterData = async (users, options = {}) => {
 
     // Ambil semua username dari data user
     const usernames = users.map(user => user.username);
+    console.log('Usernames to search:', usernames);
     
     // Ambil data master pegawai berdasarkan NIP (username)
     const masterData = await MstPegawai.findAll({
@@ -43,6 +44,9 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
       ]
     });
+
+    console.log('Master data found:', masterData.length);
+    console.log('Sample master data:', masterData[0]?.toJSON());
 
     // Ambil data Satker dan Bidang secara terpisah
     const kdsatkerList = [...new Set(masterData.map(p => p.KDSATKER).filter(Boolean))];
