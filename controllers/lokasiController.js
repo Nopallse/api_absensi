@@ -118,7 +118,7 @@ const createLokasi = async (req, res) => {
 
 const getLokasi = async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, id_skpd, id_satker, id_bidang } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
@@ -126,9 +126,23 @@ const getLokasi = async (req, res) => {
     // Build where condition
     let whereCondition = {};
     
+    // Filter berdasarkan organizational ID
+    // Support untuk filter null values dengan string "null"
+    if (id_skpd !== undefined) {
+      whereCondition.id_skpd = id_skpd === 'null' ? null : id_skpd;
+    }
+    
+    if (id_satker !== undefined) {
+      whereCondition.id_satker = id_satker === 'null' ? null : id_satker;
+    }
+    
+    if (id_bidang !== undefined) {
+      whereCondition.id_bidang = id_bidang === 'null' ? null : id_bidang;
+    }
+    
     // Jika ada parameter search, tambahkan kondisi pencarian
     if (search) {
-      whereCondition = {
+      const searchCondition = {
         [Op.or]: [
           {
             ket: {
@@ -152,6 +166,18 @@ const getLokasi = async (req, res) => {
           }
         ]
       };
+      
+      // Gabungkan filter organisasi dengan search condition
+      if (Object.keys(whereCondition).length > 0) {
+        whereCondition = {
+          [Op.and]: [
+            whereCondition,
+            searchCondition
+          ]
+        };
+      } else {
+        whereCondition = searchCondition;
+      }
     }
 
     // Ambil data lokasi dengan atau tanpa filter pencarian
@@ -159,6 +185,7 @@ const getLokasi = async (req, res) => {
       where: whereCondition,
       offset,
       limit,
+      order: [['lokasi_id', 'DESC']]
     });
 
     // Tambahkan data organisasi untuk setiap lokasi
@@ -179,14 +206,35 @@ const getLokasi = async (req, res) => {
       itemsPerPage: limit,
     };
 
-    const message = search 
-      ? `Ditemukan ${lokasisWithOrgData.length} lokasi untuk pencarian "${search}"`
-      : "Data lokasi berhasil diambil";
+    // Build response message
+    let message = "Data lokasi berhasil diambil";
+    const filters = [];
+    
+    if (id_skpd !== undefined) {
+      filters.push(`SKPD: ${id_skpd === 'null' ? 'NULL' : id_skpd}`);
+    }
+    if (id_satker !== undefined) {
+      filters.push(`Satker: ${id_satker === 'null' ? 'NULL' : id_satker}`);
+    }
+    if (id_bidang !== undefined) {
+      filters.push(`Bidang: ${id_bidang === 'null' ? 'NULL' : id_bidang}`);
+    }
+    if (search) filters.push(`Search: "${search}"`);
+    
+    if (filters.length > 0) {
+      message = `Ditemukan ${lokasisWithOrgData.length} lokasi dengan filter [${filters.join(', ')}]`;
+    }
 
     return res.status(200).json({
       message,
       data: lokasisWithOrgData,
       pagination,
+      filters: {
+        id_skpd: id_skpd !== undefined ? (id_skpd === 'null' ? null : id_skpd) : undefined,
+        id_satker: id_satker !== undefined ? (id_satker === 'null' ? null : id_satker) : undefined,
+        id_bidang: id_bidang !== undefined ? (id_bidang === 'null' ? null : id_bidang) : undefined,
+        search: search || null
+      }
     });
   } catch (error) {
     console.error(error);

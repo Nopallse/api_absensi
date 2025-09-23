@@ -365,54 +365,53 @@ const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) =>
       }
     }
 
-    let whereCondition;
-    
-    if (validNips) {
-      // Jika ada filter SKPD, cek apakah query adalah NIP exact match
-      if (validNips.includes(query)) {
-        // Jika query adalah NIP yang valid, gunakan exact match
-        whereCondition = {
-          username: query
-        };
-      } else {
-        // Jika bukan NIP exact, gunakan search dengan filter
-        whereCondition = {
-          [Op.and]: [
-            {
-              [Op.or]: [
-                { username: { [Op.like]: `%${query}%` } },
-                { email: { [Op.like]: `%${query}%` } }
-              ]
-            },
-            {
-              username: {
-                [Op.in]: validNips
-              }
-            }
-          ]
-        };
-      }
-    } else {
-      // Jika tidak ada filter SKPD, hanya search biasa
-      whereCondition = {
-        [Op.or]: [
-          { username: { [Op.like]: `%${query}%` } },
-          { email: { [Op.like]: `%${query}%` } }
+    // Search di master data berdasarkan nama atau NIP
+    let masterSearchCondition = {
+      [Op.or]: [
+        { NIP: { [Op.like]: `%${query}%` } },
+        { NAMA: { [Op.like]: `%${query}%` } }
+      ]
+    };
+
+    // Jika ada filter SKPD, tambahkan ke kondisi
+    if (id_skpd) {
+      masterSearchCondition = {
+        [Op.and]: [
+          masterSearchCondition,
+          { KDSKPD: id_skpd }
         ]
       };
     }
 
-    const users = await User.findAll({
-      where: whereCondition,
+    // Cari di master data pegawai berdasarkan nama atau NIP
+    const masterResults = await MstPegawai.findAll({
+      where: masterSearchCondition,
+      attributes: ['NIP'],
       limit: options.limit || 50,
       offset: options.offset || 0
+    });
+
+    const foundNips = masterResults.map(p => p.NIP);
+
+    if (foundNips.length === 0) {
+      return []; // Tidak ada data ditemukan
+    }
+
+    // Ambil data user berdasarkan NIP yang ditemukan
+    const users = await User.findAll({
+      where: {
+        username: {
+          [Op.in]: foundNips
+        }
+      },
+      attributes: { exclude: ["password_hash"] },
+      order: options.order || [['id', 'DESC']]
     });
 
     // Map dengan data master
     const usersWithMasterData = await mapUsersWithMasterData(users, options);
 
-    // Filter berdasarkan SKPD jika ada
-    return filterUsersBySkpd(usersWithMasterData, id_skpd);
+    return usersWithMasterData;
   } catch (error) {
     console.error('Error searching users with master data:', error);
     throw error;

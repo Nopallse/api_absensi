@@ -78,8 +78,42 @@ const getAllUser = async (req, res) => {
         });
       }
 
-      // For search, we'll approximate total count
-      totalUsers = users.length; // This is an approximation for pagination
+      // For search, get total count from master data
+      let masterSearchCondition = {
+        [Op.or]: [
+          { NIP: { [Op.like]: `%${search}%` } },
+          { NAMA: { [Op.like]: `%${search}%` } }
+        ]
+      };
+
+      if (id_skpd) {
+        masterSearchCondition = {
+          [Op.and]: [
+            masterSearchCondition,
+            { KDSKPD: id_skpd }
+          ]
+        };
+      }
+
+      // Count total matching records in master data
+      const masterCount = await MstPegawai.count({
+        where: masterSearchCondition
+      });
+
+      // Count how many of those NIPs exist in User table
+      const masterNips = await MstPegawai.findAll({
+        where: masterSearchCondition,
+        attributes: ['NIP']
+      });
+
+      const foundNips = masterNips.map(p => p.NIP);
+      totalUsers = foundNips.length > 0 ? await User.count({
+        where: {
+          username: {
+            [Op.in]: foundNips
+          }
+        }
+      }) : 0;
       
     } else {
       // Normal get all logic
