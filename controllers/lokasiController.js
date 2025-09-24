@@ -118,7 +118,7 @@ const createLokasi = async (req, res) => {
 
 const getLokasi = async (req, res) => {
   try {
-    const { search, id_skpd, id_satker, id_bidang } = req.query;
+  const { search, id_skpd, id_satker, id_bidang, status } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
@@ -138,6 +138,15 @@ const getLokasi = async (req, res) => {
     
     if (id_bidang !== undefined) {
       whereCondition.id_bidang = id_bidang === 'null' ? null : id_bidang;
+    }
+
+    // Filter status lokasi (1 = aktif, 0 = nonaktif)
+    if (status !== undefined) {
+      if (status === '1' || status === 1) {
+        whereCondition.status = true;
+      } else if (status === '0' || status === 0) {
+        whereCondition.status = false;
+      }
     }
     
     // Jika ada parameter search, tambahkan kondisi pencarian
@@ -219,6 +228,10 @@ const getLokasi = async (req, res) => {
     if (id_bidang !== undefined) {
       filters.push(`Bidang: ${id_bidang === 'null' ? 'NULL' : id_bidang}`);
     }
+    if (status !== undefined) {
+      const statusText = status === '1' || status === 1 ? 'Aktif' : 'Tidak Aktif';
+      filters.push(`Status: ${statusText}`);
+    }
     if (search) filters.push(`Search: "${search}"`);
     
     if (filters.length > 0) {
@@ -233,6 +246,7 @@ const getLokasi = async (req, res) => {
         id_skpd: id_skpd !== undefined ? (id_skpd === 'null' ? null : id_skpd) : undefined,
         id_satker: id_satker !== undefined ? (id_satker === 'null' ? null : id_satker) : undefined,
         id_bidang: id_bidang !== undefined ? (id_bidang === 'null' ? null : id_bidang) : undefined,
+        status: status !== undefined ? (status === '1' || status === 1 ? true : false) : undefined,
         search: search || null
       }
     });
@@ -265,7 +279,11 @@ const getLokasiById = async (req, res) => {
 const updateLokasi = async (req, res) => {
   try {
     const { lokasi_id } = req.params;
-    const { lat, lng, range, id_skpd, id_satker, id_bidang, ket, status } = req.body;
+    
+    console.log('Update lokasi request:', {
+      lokasi_id,
+      body: req.body
+    });
 
     const lokasi = await Lokasi.findOne({ where: { lokasi_id } });
 
@@ -273,17 +291,27 @@ const updateLokasi = async (req, res) => {
       return res.status(404).json({ message: "Lokasi tidak ditemukan" });
     }
 
-    await lokasi.update({ 
-      lat, 
-      lng, 
-      range, 
-      id_skpd: id_skpd || null,
-      id_satker: id_satker || null,
-      id_bidang: id_bidang || null,
-      ket: ket || null,
-      status: status !== undefined ? status : lokasi.status
-    });
+    // Hanya update field yang ada di request body (PATCH behavior)
+    const updateData = {};
+    
+    if (req.body.lat !== undefined) updateData.lat = req.body.lat;
+    if (req.body.lng !== undefined) updateData.lng = req.body.lng;
+    if (req.body.range !== undefined) updateData.range = req.body.range;
+    if (req.body.ket !== undefined) updateData.ket = req.body.ket;
+    if (req.body.status !== undefined) updateData.status = req.body.status;
+    
+    // Handle organizational fields - allow null values untuk unset
+    if (req.body.hasOwnProperty('id_skpd')) updateData.id_skpd = req.body.id_skpd;
+    if (req.body.hasOwnProperty('id_satker')) updateData.id_satker = req.body.id_satker;
+    if (req.body.hasOwnProperty('id_bidang')) updateData.id_bidang = req.body.id_bidang;
 
+    console.log('Fields to update:', updateData);
+
+    await lokasi.update(updateData);
+
+    // Refresh data setelah update
+    await lokasi.reload();
+    
     // Tambahkan data organisasi untuk response
     const lokasiWithOrgData = await getOrganizationData(lokasi);
 
@@ -292,7 +320,7 @@ const updateLokasi = async (req, res) => {
       data: lokasiWithOrgData
     });
   } catch (error) {
-    console.error(error);
+    console.error('UpdateLokasi Error:', error);
     return res.status(500).json({ message: "Terjadi kesalahan server" });
   }
 };

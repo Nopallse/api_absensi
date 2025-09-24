@@ -346,7 +346,7 @@ const filterUsersBySkpd = (users, id_skpd) => {
  * Search users dengan master data
  * @param {String} query - Query pencarian
  * @param {String} id_skpd - ID SKPD untuk filter (optional)
- * @param {Object} options - Opsi tambahan
+ * @param {Object} options - Opsi tambahan termasuk status
  * @returns {Array} Array data user yang sudah digabung dengan data master
  */
 const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) => {
@@ -397,13 +397,21 @@ const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) =>
       return []; // Tidak ada data ditemukan
     }
 
+    // Buat kondisi untuk User table
+    let userWhere = {
+      username: {
+        [Op.in]: foundNips
+      }
+    };
+
+    // Tambahkan filter status jika ada
+    if (options.status !== undefined) {
+      userWhere.status = options.status;
+    }
+
     // Ambil data user berdasarkan NIP yang ditemukan
     const users = await User.findAll({
-      where: {
-        username: {
-          [Op.in]: foundNips
-        }
-      },
+      where: userWhere,
       attributes: { exclude: ["password_hash"] },
       order: options.order || [['id', 'DESC']]
     });

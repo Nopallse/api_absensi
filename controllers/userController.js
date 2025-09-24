@@ -30,11 +30,11 @@ const getUser = async (req, res) => {
 
 const getAllUser = async (req, res) => {
   try {
-    // Ambil parameter pagination dan search dari query
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-    const { search } = req.query; // Support search parameter
+  // Ambil parameter pagination, search, dan status dari query
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = (page - 1) * limit;
+  const { search, status } = req.query; // Support search dan status parameter
     
     // Ambil level user dari request (req.user.level)
     const userLevel = req.user.level;
@@ -62,8 +62,9 @@ const getAllUser = async (req, res) => {
 
     // Jika ada search query, gunakan search function
     if (search) {
-      users = await searchUsersWithMasterData(search, id_skpd, { limit, offset, order: [['id', 'DESC']] });
-      
+      // Tambahkan status ke filter jika ada
+      users = await searchUsersWithMasterData(search, id_skpd, { limit, offset, order: [['id', 'DESC']], status });
+
       if (users.length === 0) {
         return res.json({
           data: [],
@@ -107,14 +108,19 @@ const getAllUser = async (req, res) => {
       });
 
       const foundNips = masterNips.map(p => p.NIP);
-      totalUsers = foundNips.length > 0 ? await User.count({
-        where: {
-          username: {
-            [Op.in]: foundNips
-          }
+      // Tambahkan filter status jika ada
+      let userWhere = {
+        username: {
+          [Op.in]: foundNips
         }
+      };
+      if (status !== undefined) {
+        userWhere.status = status;
+      }
+      totalUsers = foundNips.length > 0 ? await User.count({
+        where: userWhere
       }) : 0;
-      
+
     } else {
       // Normal get all logic
       if (id_skpd) {
@@ -126,7 +132,7 @@ const getAllUser = async (req, res) => {
 
         // Buat array NIP yang valid untuk filter
         const validNips = pegawaiWithSkpd.map(p => p.NIP);
-        
+
         if (validNips.length === 0) {
           // Jika tidak ada data master, return empty
           return res.json({
@@ -142,21 +148,21 @@ const getAllUser = async (req, res) => {
         }
 
         // Hitung total user yang memiliki NIP valid
-        totalUsers = await User.count({
-          where: {
-            username: {
-              [Op.in]: validNips
-            }
+        let userWhere = {
+          username: {
+            [Op.in]: validNips
           }
+        };
+        if (status !== undefined) {
+          userWhere.status = status;
+        }
+        totalUsers = await User.count({
+          where: userWhere
         });
 
         // Ambil user dengan pagination dan urutkan DESC
         const userList = await User.findAll({
-          where: {
-            username: {
-              [Op.in]: validNips
-            }
-          },
+          where: userWhere,
           attributes: { exclude: ["password_hash"] },
           limit: limit,
           offset: offset,
@@ -168,8 +174,15 @@ const getAllUser = async (req, res) => {
 
       } else {
         // Tanpa filter - ambil semua data dengan pagination dan urutkan DESC
-        totalUsers = await User.count();
+        let userWhere = {};
+        if (status !== undefined) {
+          userWhere.status = status;
+        }
+        totalUsers = await User.count({
+          where: userWhere
+        });
         const userList = await User.findAll({
+          where: userWhere,
           attributes: { exclude: ["password_hash"] },
           limit: limit,
           offset: offset,

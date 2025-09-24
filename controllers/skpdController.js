@@ -10,11 +10,15 @@ const getAllSkpd = async (req, res) => {
     const offset = (page - 1) * limit;
     const { query, status } = req.query; // Support search & status filter
 
-    // Build where clause
-    let whereClause = {};
+    // Build where clause dengan default filter status aktif
+    let whereClause = {
+      // Default filter: hanya tampilkan SKPD dengan status aktif
+      StatusSKPD: 'Aktif'
+    };
     
     if (query) {
       whereClause = {
+        ...whereClause,
         [Sequelize.Op.or]: [
           { KDSKPD: { [Sequelize.Op.like]: `%${query}%` } },
           { NMSKPD: { [Sequelize.Op.like]: `%${query}%` } },
@@ -22,7 +26,7 @@ const getAllSkpd = async (req, res) => {
       };
     }
 
-    // Tambahkan filter status jika ada
+    // Override status filter jika secara eksplisit diminta
     if (status !== undefined) {
       // Jika status = 'null' maka cari yang null, jika tidak, exact match
       if (status === 'null') {
@@ -30,6 +34,10 @@ const getAllSkpd = async (req, res) => {
           ...whereClause,
           StatusSKPD: null
         };
+      } else if (status === 'all') {
+        // Jika diminta 'all', hapus filter status
+        const { StatusSKPD, ...whereWithoutStatus } = whereClause;
+        whereClause = whereWithoutStatus;
       } else {
         whereClause = {
           ...whereClause,
@@ -58,7 +66,7 @@ const getAllSkpd = async (req, res) => {
       return res.status(404).json({ 
         error: errorMessage,
         searchQuery: query || null,
-        statusFilter: status || null,
+        statusFilter: status || 'Aktif', // Default ke 'Aktif'
         pagination: {
           totalItems: 0,
           totalPages: 0,
@@ -128,7 +136,7 @@ const getAllSkpd = async (req, res) => {
         itemsPerPage: limit
       },
       searchQuery: query || null,
-      statusFilter: status !== undefined ? status : null
+      statusFilter: status || 'Aktif' // Default ke 'Aktif'
     });
   } catch (error) {
     console.error('GetAllSkpd Error:', error);
@@ -213,17 +221,36 @@ const getSkpdById = async (req, res) => {
 
 
 
-// Get available SKPD codes for filtering
+// Get available SKPD codes for filtering (hanya yang aktif)
 const getAvailableSkpdCodes = async (req, res) => {
   try {
+    const { status } = req.query; // Allow override with query parameter
+    
+    let whereClause = {
+      StatusSKPD: 'Aktif' // Default hanya yang aktif
+    };
+
+    // Override jika diminta status tertentu
+    if (status !== undefined) {
+      if (status === 'all') {
+        whereClause = {}; // Tampilkan semua
+      } else if (status === 'null') {
+        whereClause = { StatusSKPD: null };
+      } else {
+        whereClause = { StatusSKPD: status };
+      }
+    }
+
     const skpdCodes = await SkpdTbl.findAll({
       attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
+      where: whereClause,
       order: [['KDSKPD', 'ASC']]
     });
 
     res.json({
       data: skpdCodes,
-      total: skpdCodes.length
+      total: skpdCodes.length,
+      statusFilter: status || 'Aktif'
     });
   } catch (error) {
     console.error('GetAvailableSkpdCodes Error:', error);
