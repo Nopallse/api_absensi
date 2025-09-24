@@ -10,7 +10,7 @@ const {
   deleteLokasi,
 } = require("../controllers/lokasiController");
 const { register, forceLogoutUser } = require("../controllers/authController");
-const { getUserById, getAllUser, searchUsers, updateUserByAdmin } = require("../controllers/userController");
+const { getUserById, getAllUser, updateUserByAdmin } = require("../controllers/userController");
 const { getAllKehadiran, getKehadiranByUserId, getKehadiranById, getMonthlyAttendanceByFilter, getMonthlyAttendanceSummaryByUser } = require("../controllers/kehadiranController");
 const { 
     getDashboardOverview, 
@@ -38,7 +38,7 @@ const {
     deleteOrganizationAssignment,
     toggleOrganizationAssignmentStatus
 } = require("../controllers/jamDinasController");
-const { getAllSkpd, getSkpdById, getSkpdByStatus } = require("../controllers/skpdController");
+const { getAllSkpd, getSkpdById } = require("../controllers/skpdController");
 const { getAllSatker, searchSatker, getSatkerById, getSatkerBySkpd } = require("../controllers/satkerController");
 const { getAllBidang, searchBidang, getBidangById, getBidangBySatker } = require("../controllers/bidangController");
 const { 
@@ -270,7 +270,6 @@ router.delete("/jam-dinas-details/:id",
 
 
 router.get("/skpd", requireSuperAdmin(), getAllSkpd);
-router.get("/skpd/status", requireSuperAdmin(), getSkpdByStatus);
 router.get("/skpd/:kdskpd", requireSuperAdmin(), getSkpdById);
 
 // Level 2: SKPD -> Satker (Second Level)

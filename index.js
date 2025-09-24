@@ -45,7 +45,7 @@ const syncDatabases = async () => {
   }
 };
 
-// Routes
+// Routes - API routes must come BEFORE static file serving
 app.use("/api/superadmin", adminRoutes);
 app.use("/api/admin", adminOpdRoutes);
 app.use("/api/auth", authRoutes);
@@ -56,6 +56,13 @@ app.use("/api/lokasi", lokasiRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
 app.use("/api/docs", docsRoutes);
+
+// Static files and catch-all route should come AFTER API routes
+app.use(express.static(path.join(__dirname, "../presensi-web/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../presensi-web/dist/index.html"));
+});
 
 // Serve static files for Swagger UI
 app.use('/swagger', express.static(path.join(__dirname, 'swagger')));

@@ -4,13 +4,13 @@ const Sequelize = require("sequelize");
 // Get all SKPD with employee count and admin info (supports search)
 const getAllSkpd = async (req, res) => {
   try {
-    // Ambil parameter pagination dan search dari query
+    // Ambil parameter pagination, search, dan status dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { query } = req.query; // Support search parameter
+    const { query, status } = req.query; // Support search & status filter
 
-    // Build where clause - if no search, get all SKPD
+    // Build where clause
     let whereClause = {};
     
     if (query) {
@@ -20,6 +20,22 @@ const getAllSkpd = async (req, res) => {
           { NMSKPD: { [Sequelize.Op.like]: `%${query}%` } },
         ],
       };
+    }
+
+    // Tambahkan filter status jika ada
+    if (status !== undefined) {
+      // Jika status = 'null' maka cari yang null, jika tidak, exact match
+      if (status === 'null') {
+        whereClause = {
+          ...whereClause,
+          StatusSKPD: null
+        };
+      } else {
+        whereClause = {
+          ...whereClause,
+          StatusSKPD: status
+        };
+      }
     }
 
     // Hitung total data untuk informasi pagination
@@ -42,6 +58,7 @@ const getAllSkpd = async (req, res) => {
       return res.status(404).json({ 
         error: errorMessage,
         searchQuery: query || null,
+        statusFilter: status || null,
         pagination: {
           totalItems: 0,
           totalPages: 0,
@@ -101,7 +118,7 @@ const getAllSkpd = async (req, res) => {
       })
     );
 
-    // Kirim response dengan informasi pagination dan search
+    // Kirim response dengan informasi pagination, search, dan status
     res.json({
       data: skpdWithDetails,
       pagination: {
@@ -110,7 +127,8 @@ const getAllSkpd = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      searchQuery: query || null
+      searchQuery: query || null,
+      statusFilter: status !== undefined ? status : null
     });
   } catch (error) {
     console.error('GetAllSkpd Error:', error);
@@ -193,97 +211,7 @@ const getSkpdById = async (req, res) => {
   }
 };
 
-// Get SKPD by status
-const getSkpdByStatus = async (req, res) => {
-  try {
-    const { status } = req.query;
-    
-    if (!status) {
-      return res.status(400).json({ error: "Status parameter is required" });
-    }
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    // Hitung total data untuk informasi pagination
-    const totalSkpd = await SkpdTbl.count({
-      where: { StatusSKPD: status }
-    });
-    const totalPages = Math.ceil(totalSkpd / limit);
-
-    // Ambil data SKPD berdasarkan status
-    const skpdList = await SkpdTbl.findAll({
-      where: { StatusSKPD: status },
-      limit: limit,
-      offset: offset,
-      order: [['KDSKPD', 'ASC']]
-    });
-
-    // Tambahkan informasi detail
-    const skpdWithDetails = await Promise.all(
-      skpdList.map(async (skpd) => {
-        const skpdData = skpd.toJSON();
-        
-        try {
-          // Hitung jumlah karyawan
-          const employeeCount = await MstPegawai.count({
-            where: { KDSKPD: skpd.KDSKPD }
-          });
-
-          // Ambil admin
-          const admins = await AdmOpd.findAll({
-            where: { id_skpd: skpd.KDSKPD },
-            include: [
-              {
-                model: User,
-                attributes: ['id', 'username', 'email', 'level', 'status']
-              }
-            ]
-          });
-
-          const adminList = admins.map(admin => ({
-            id: admin.User.id,
-            username: admin.User.username,
-            email: admin.User.email,
-            level: admin.User.level,
-            status: admin.User.status,
-            kategori: admin.kategori
-          }));
-
-          return {
-            ...skpdData,
-            employee_count: employeeCount,
-            admin_count: admins.length,
-            admins: adminList
-          };
-        } catch (error) {
-          console.error(`Error getting details for SKPD ${skpd.KDSKPD}:`, error);
-          return {
-            ...skpdData,
-            employee_count: 0,
-            admin_count: 0,
-            admins: []
-          };
-        }
-      })
-    );
-
-    res.json({
-      data: skpdWithDetails,
-      pagination: {
-        totalItems: totalSkpd,
-        totalPages: totalPages,
-        currentPage: page,
-        itemsPerPage: limit
-      },
-      filter: { status }
-    });
-  } catch (error) {
-    console.error('GetSkpdByStatus Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
 // Get available SKPD codes for filtering
 const getAvailableSkpdCodes = async (req, res) => {
@@ -306,6 +234,5 @@ const getAvailableSkpdCodes = async (req, res) => {
 module.exports = { 
   getAllSkpd, 
   getSkpdById, 
-  getSkpdByStatus,
   getAvailableSkpdCodes
-}; 
+};
