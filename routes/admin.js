@@ -13,11 +13,7 @@ const { register, forceLogoutUser } = require("../controllers/authController");
 const { getUserById, getAllUser, updateUserByAdmin } = require("../controllers/userController");
 const { getAllKehadiran, getKehadiranByUserId, getKehadiranById, getMonthlyAttendanceByFilter, getMonthlyAttendanceSummaryByUser } = require("../controllers/kehadiranController");
 const { 
-    getDashboardOverview, 
-    getWeeklyAttendanceStats, 
-    getTopAttendanceUsers, 
-    getLocationAttendanceStats, 
-    getTodayRealTimeStats 
+    getSuperAdminDashboard
 } = require("../controllers/dashboardController");
 const { 
     getAllJamDinas,
@@ -66,13 +62,6 @@ router.post("/register",
   register
 );
 
-// Routes untuk Admin OPD dan ke atas (level 1, 2, 3)
-// Dashboard routes
-router.get("/dashboard/overview", requireSuperAdmin(), getDashboardOverview);
-router.get("/dashboard/weekly-stats", requireSuperAdmin(), getWeeklyAttendanceStats);
-router.get("/dashboard/top-users", requireSuperAdmin(), getTopAttendanceUsers);
-router.get("/dashboard/location-stats", requireSuperAdmin(), getLocationAttendanceStats);
-router.get("/dashboard/realtime", requireSuperAdmin(), getTodayRealTimeStats);
 
 // User management
 router.get("/users", requireSuperAdmin(), getAllUser);
@@ -96,6 +85,16 @@ router.post("/users/:userId/force-logout",
   forceLogoutUser
 );
 
+// Dashboard routes
+router.get("/dashboard/super-admin", 
+  requireSuperAdmin(), 
+  adminLogMiddleware({ 
+    action: 'READ', 
+    resource: 'dashboard',
+    getDescription: () => 'Access super admin dashboard with kehadiran filtering'
+  }),
+  getSuperAdminDashboard
+);
 
 
 // Lokasi management
@@ -158,11 +157,6 @@ router.get("/kehadiran/export/bulanan",
   exportPresensiBulanan
 );
 
-// Debug endpoint untuk test export
-router.get("/debug/export/harian", 
-  requireSuperAdmin(),
-  debugExportHarian
-);
 
 
 
@@ -282,10 +276,8 @@ router.get("/skpd/:kdskpd/satker/:kdsatker/bidang/:bidangf", requireSuperAdmin()
 
 // Alternative flat structure for backward compatibility
 router.get("/satker", requireSuperAdmin(), getAllSatker);
-router.get("/satker/search", requireSuperAdmin(), searchSatker);
 router.get("/satker/:kdsatker", requireSuperAdmin(), getSatkerById);
 router.get("/bidang", requireSuperAdmin(), getAllBidang);
-router.get("/bidang/search", requireSuperAdmin(), searchBidang);
 router.get("/bidang/:bidangf", requireSuperAdmin(), getBidangById);
 
 

@@ -1,19 +1,18 @@
-const { SkpdTbl, AdmOpd, User, MstPegawai, SkpdLokasi, Lokasi } = require("../models");
+const { SkpdTbl, AdmOpd, User, MstPegawai, SkpdLokasi, Lokasi, SatkerTbl, BidangTbl } = require("../models");
 const Sequelize = require("sequelize");
 
 // Get all SKPD with employee count and admin info (supports search)
 const getAllSkpd = async (req, res) => {
   try {
-    // Ambil parameter pagination, search, dan status dari query
+    // Ambil parameter pagination dan search dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { query, status } = req.query; // Support search & status filter
+    const { query } = req.query; // Support search only
 
-    // Build where clause dengan default filter status aktif
+    // Build where clause - selalu filter status aktif
     let whereClause = {
-      // Default filter: hanya tampilkan SKPD dengan status aktif
-      StatusSKPD: 'Aktif'
+      StatusSKPD: 'Aktif' // Selalu hanya tampilkan SKPD dengan status aktif
     };
     
     if (query) {
@@ -24,26 +23,6 @@ const getAllSkpd = async (req, res) => {
           { NMSKPD: { [Sequelize.Op.like]: `%${query}%` } },
         ],
       };
-    }
-
-    // Override status filter jika secara eksplisit diminta
-    if (status !== undefined) {
-      // Jika status = 'null' maka cari yang null, jika tidak, exact match
-      if (status === 'null') {
-        whereClause = {
-          ...whereClause,
-          StatusSKPD: null
-        };
-      } else if (status === 'all') {
-        // Jika diminta 'all', hapus filter status
-        const { StatusSKPD, ...whereWithoutStatus } = whereClause;
-        whereClause = whereWithoutStatus;
-      } else {
-        whereClause = {
-          ...whereClause,
-          StatusSKPD: status
-        };
-      }
     }
 
     // Hitung total data untuk informasi pagination
@@ -66,7 +45,6 @@ const getAllSkpd = async (req, res) => {
       return res.status(404).json({ 
         error: errorMessage,
         searchQuery: query || null,
-        statusFilter: status || 'Aktif', // Default ke 'Aktif'
         pagination: {
           totalItems: 0,
           totalPages: 0,
@@ -87,46 +65,65 @@ const getAllSkpd = async (req, res) => {
             where: { KDSKPD: skpd.KDSKPD }
           });
 
-          // Ambil admin dari database utama
-          const admins = await AdmOpd.findAll({
-            where: { id_skpd: skpd.KDSKPD },
-            include: [
-              {
-                model: User,
-                attributes: ['id', 'username', 'email', 'level', 'status']
-              }
-            ]
+          // Hitung jumlah Satker
+          const satkerCount = await SatkerTbl.count({
+            where: { KDSKPD: skpd.KDSKPD }
           });
 
-          // Format data admin
-          const adminList = admins.map(admin => ({
-            id: admin.User.id,
-            username: admin.User.username,
-            email: admin.User.email,
-            level: admin.User.level,
-            status: admin.User.status,
-            kategori: admin.kategori
-          }));
+          // Hitung jumlah Bidang
+          const bidangCount = await BidangTbl.count({
+            where: { 
+              KDSATKER: {
+                [Sequelize.Op.in]: await SatkerTbl.findAll({
+                  where: { KDSKPD: skpd.KDSKPD },
+                  attributes: ['KDSATKER']
+                }).then(satkers => satkers.map(s => s.KDSATKER))
+              }
+            }
+          });
+
+          // Hitung jumlah Lokasi
+          const lokasiCount = await Lokasi.count({
+            where: { 
+              id_skpd: skpd.KDSKPD,
+              status: true
+            }
+          });
+
+          // Ambil detail lokasi
+          const lokasiList = await Lokasi.findAll({
+            where: { 
+              id_skpd: skpd.KDSKPD,
+              status: true
+            },
+            attributes: ['lokasi_id', 'lat', 'lng', 'ket', 'id_satker', 'id_bidang']
+          });
+
+
 
           return {
             ...skpdData,
             employee_count: employeeCount,
-            admin_count: admins.length,
-            admins: adminList
+            satker_count: satkerCount,
+            bidang_count: bidangCount,
+            lokasi_count: lokasiCount,
+            lokasi_list: lokasiList,
           };
         } catch (error) {
           console.error(`Error getting details for SKPD ${skpd.KDSKPD}:`, error);
           return {
             ...skpdData,
             employee_count: 0,
-            admin_count: 0,
-            admins: []
+            satker_count: 0,
+            bidang_count: 0,
+            lokasi_count: 0,
+            lokasi_list: [],
           };
         }
       })
     );
 
-    // Kirim response dengan informasi pagination, search, dan status
+    // Kirim response dengan informasi pagination dan search
     res.json({
       data: skpdWithDetails,
       pagination: {
@@ -135,8 +132,7 @@ const getAllSkpd = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      searchQuery: query || null,
-      statusFilter: status || 'Aktif' // Default ke 'Aktif'
+      searchQuery: query || null
     });
   } catch (error) {
     console.error('GetAllSkpd Error:', error);
@@ -160,6 +156,23 @@ const getSkpdById = async (req, res) => {
       // Hitung jumlah karyawan
       const employeeCount = await MstPegawai.count({
         where: { KDSKPD: kdskpd }
+      });
+
+      // Hitung jumlah Satker
+      const satkerCount = await SatkerTbl.count({
+        where: { KDSKPD: kdskpd }
+      });
+
+      // Hitung jumlah Bidang
+      const bidangCount = await BidangTbl.count({
+        where: { 
+          KDSATKER: {
+            [Sequelize.Op.in]: await SatkerTbl.findAll({
+              where: { KDSKPD: kdskpd },
+              attributes: ['KDSATKER']
+            }).then(satkers => satkers.map(s => s.KDSATKER))
+          }
+        }
       });
 
       // Ambil admin
@@ -187,7 +200,7 @@ const getSkpdById = async (req, res) => {
         where: { kdskpd },
         include: [{
           model: Lokasi,
-          attributes: ['lokasi_id', 'lat', 'lng', 'range', 'ket', 'status']
+          attributes: ['lokasi_id', 'lat', 'lng', 'range', 'ket', 'status', 'id_satker', 'id_bidang']
         }]
       });
 
@@ -197,6 +210,8 @@ const getSkpdById = async (req, res) => {
       res.json({
         ...skpdData,
         employee_count: employeeCount,
+        satker_count: satkerCount,
+        bidang_count: bidangCount,
         admin_count: admins.length,
         admins: adminList,
         lokasi_count: lokasiList.length,
@@ -207,6 +222,8 @@ const getSkpdById = async (req, res) => {
       res.json({
         ...skpd.toJSON(),
         employee_count: 0,
+        satker_count: 0,
+        bidang_count: 0,
         admin_count: 0,
         admins: [],
         lokasi_count: 0,
@@ -224,22 +241,10 @@ const getSkpdById = async (req, res) => {
 // Get available SKPD codes for filtering (hanya yang aktif)
 const getAvailableSkpdCodes = async (req, res) => {
   try {
-    const { status } = req.query; // Allow override with query parameter
-    
-    let whereClause = {
-      StatusSKPD: 'Aktif' // Default hanya yang aktif
+    // Selalu filter hanya SKPD dengan status aktif
+    const whereClause = {
+      StatusSKPD: 'Aktif'
     };
-
-    // Override jika diminta status tertentu
-    if (status !== undefined) {
-      if (status === 'all') {
-        whereClause = {}; // Tampilkan semua
-      } else if (status === 'null') {
-        whereClause = { StatusSKPD: null };
-      } else {
-        whereClause = { StatusSKPD: status };
-      }
-    }
 
     const skpdCodes = await SkpdTbl.findAll({
       attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
@@ -249,8 +254,7 @@ const getAvailableSkpdCodes = async (req, res) => {
 
     res.json({
       data: skpdCodes,
-      total: skpdCodes.length,
-      statusFilter: status || 'Aktif'
+      total: skpdCodes.length
     });
   } catch (error) {
     console.error('GetAvailableSkpdCodes Error:', error);

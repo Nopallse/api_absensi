@@ -1,4 +1,5 @@
 const { Lokasi, MstPegawai, SkpdTbl, SatkerTbl, BidangTbl } = require("../models");
+const { getLokasiByUserData } = require("../utils/locationUtils");
 
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
@@ -49,25 +50,31 @@ const getMyLocation = async (req, res) => {
       });
     }
 
-    // Ambil lokasi berdasarkan SKPD/Satker/Bidang pegawai
-    const lokasi = await Lokasi.findAll({
-      where: {
-        [Op.or]: [
-          { id_skpd: pegawai.KDSKPD },
-          { id_satker: pegawai.KDSATKER },
-          { id_bidang: pegawai.KDBIDANG }
-        ],
-        status: true
-      }
-    });
+    // Buat userData object dari data pegawai
+    const userData = {
+      kdskpd: pegawai.KDSKPD,
+      kdsatker: pegawai.KDSATKER,
+      bidangf: pegawai.BIDANGF
+    };
+
+    // Gunakan utility function untuk mendapatkan lokasi berdasarkan user data
+    const lokasiResult = await getLokasiByUserData(userData);
+
+    if (!lokasiResult) {
+      return res.status(404).json({ 
+        message: "Data lokasi tidak ditemukan untuk pegawai ini" 
+      });
+    }
 
     // Tambahkan data organisasi untuk setiap lokasi
     const lokasiWithOrgData = await Promise.all(
-      lokasi.map(async (loc) => await getOrganizationData(loc))
+      lokasiResult.data.map(async (loc) => await getOrganizationData(loc))
     );
 
     return res.status(200).json({
       data: lokasiWithOrgData,
+      lokasi_level: lokasiResult.level,
+      lokasi_count: lokasiResult.count,
       pegawai_info: {
         nip: pegawai.NIP,
         nama: pegawai.NAMA,
@@ -84,37 +91,7 @@ const getMyLocation = async (req, res) => {
   }
 };
 
-const createLokasi = async (req, res) => {
-  try {
-    const { lat, lng, range, id_skpd, id_satker, id_bidang, ket, status } = req.body;
-    console.log(req.body);
-    if (!lat || !lng || !range) {
-      return res.status(400).json({ message: "Latitude, longitude, dan range harus diisi" });
-    }
 
-    const newLokasi = await Lokasi.create({
-      lat,
-      lng,
-      range,
-      id_skpd: id_skpd || null,
-      id_satker: id_satker || null,
-      id_bidang: id_bidang || null,
-      ket: ket || null,
-      status: status !== undefined ? status : true,
-    });
-
-    // Tambahkan data organisasi
-    const lokasiWithOrgData = await getOrganizationData(newLokasi);
-
-    return res.status(201).json({
-      message: "Lokasi berhasil dibuat",
-      data: lokasiWithOrgData,
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
-  }
-};
 
 const getLokasi = async (req, res) => {
   try {
@@ -276,6 +253,64 @@ const getLokasiById = async (req, res) => {
   }
 };
 
+const createLokasi = async (req, res) => {
+  try {
+    const { lat, lng, range, id_skpd, id_satker, id_bidang, ket, status } = req.body;
+    console.log(req.body);
+    if (!lat || !lng || !range) {
+      return res.status(400).json({ message: "Latitude, longitude, dan range harus diisi" });
+    }
+
+    // id_skpd wajib diisi, id_satker dan id_bidang boleh null
+    if (!id_skpd) {
+      return res.status(400).json({ message: "Field OPD (id_skpd) wajib diisi dan tidak boleh null." });
+    }
+
+    // Cek apakah sudah ada lokasi untuk kombinasi unit kerja yang sama
+    const existingLokasi = await Lokasi.findOne({
+      where: {
+        id_skpd: id_skpd,
+        id_satker: id_satker || null,
+        id_bidang: id_bidang || null
+      }
+    });
+
+    if (existingLokasi) {
+      return res.status(409).json({
+        message: "Lokasi untuk kombinasi OPD, UPT, Bidang tersebut sudah ada."
+      });
+    }
+
+    const newLokasi = await Lokasi.create({
+      lat,
+      lng,
+      range,
+      id_skpd,
+      id_satker: id_satker || null,
+      id_bidang: id_bidang || null,
+      ket: ket || null,
+      status: status !== undefined ? status : true,
+    });
+
+    // Tambahkan data organisasi
+    const lokasiWithOrgData = await getOrganizationData(newLokasi);
+
+    return res.status(201).json({
+      message: "Lokasi berhasil dibuat",
+      data: lokasiWithOrgData,
+    });
+  } catch (error) {
+    // Tangani error duplikat secara spesifik
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        message: "Lokasi untuk unit kerja (OPD, UPT, Bidang) sudah ada."
+      });
+    }
+    console.error(error);
+    return res.status(500).json({ message: "Terjadi kesalahan server" });
+  }
+};
+
 const updateLokasi = async (req, res) => {
   try {
     const { lokasi_id } = req.params;
@@ -300,10 +335,33 @@ const updateLokasi = async (req, res) => {
     if (req.body.ket !== undefined) updateData.ket = req.body.ket;
     if (req.body.status !== undefined) updateData.status = req.body.status;
     
-    // Handle organizational fields - allow null values untuk unset
+    // Handle organizational fields - allow id_satker and id_bidang to be null, id_skpd required
     if (req.body.hasOwnProperty('id_skpd')) updateData.id_skpd = req.body.id_skpd;
     if (req.body.hasOwnProperty('id_satker')) updateData.id_satker = req.body.id_satker;
     if (req.body.hasOwnProperty('id_bidang')) updateData.id_bidang = req.body.id_bidang;
+
+    // Validasi: jika ada perubahan organisasi, id_skpd wajib diisi
+    const orgFields = ['id_skpd', 'id_satker', 'id_bidang'];
+    const orgUpdate = orgFields.some(f => updateData.hasOwnProperty(f));
+    if (orgUpdate) {
+      if (!updateData.id_skpd) {
+        return res.status(400).json({ message: "Field OPD (id_skpd) wajib diisi dan tidak boleh null saat update." });
+      }
+      // Cek duplikat kombinasi
+      const duplicateLokasi = await Lokasi.findOne({
+        where: {
+          id_skpd: updateData.id_skpd,
+          id_satker: updateData.id_satker || null,
+          id_bidang: updateData.id_bidang || null,
+          lokasi_id: { [Op.ne]: lokasi_id }
+        }
+      });
+      if (duplicateLokasi) {
+        return res.status(409).json({
+          message: "Lokasi untuk kombinasi OPD, UPT, Bidang tersebut sudah ada."
+        });
+      }
+    }
 
     console.log('Fields to update:', updateData);
 
@@ -320,6 +378,12 @@ const updateLokasi = async (req, res) => {
       data: lokasiWithOrgData
     });
   } catch (error) {
+    // Tangani error duplikat secara spesifik
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        message: "Lokasi untuk unit kerja (OPD, UPT, Bidang) sudah ada."
+      });
+    }
     console.error('UpdateLokasi Error:', error);
     return res.status(500).json({ message: "Terjadi kesalahan server" });
   }

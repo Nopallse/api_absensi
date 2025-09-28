@@ -11,6 +11,10 @@ const {
     getCheckoutStatus,
     getApelStatus
 } = require('../utils/timeUtils');
+const {
+    getPegawaiByNip,
+    searchPegawai
+} = require('../utils/masterDbUtils');
 
 
 
@@ -395,6 +399,7 @@ const getKehadiranByUserId = async(req, res) => {
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 10;
         const offset = (page - 1) * limit;
+        const { start_date, end_date, sort = 'desc' } = req.query;
 
         // Get user by ID to get the username (NIP)
         const user = await User.findByPk(user_id);
@@ -402,17 +407,38 @@ const getKehadiranByUserId = async(req, res) => {
             return res.status(404).json({ error: 'User tidak ditemukan' });
         }
 
+        // Build where condition for date filtering
+        let whereCondition = {
+            absen_nip: user.username // Menggunakan username sebagai NIP
+        };
+        
+        // Add date filtering if provided
+        if (start_date || end_date) {
+            whereCondition.absen_tgl = {};
+            
+            if (start_date) {
+                whereCondition.absen_tgl[Op.gte] = new Date(start_date);
+            }
+            
+            if (end_date) {
+                whereCondition.absen_tgl[Op.lte] = new Date(end_date);
+            }
+        }
+
+        // Validate sort parameter
+        const validSorts = ['asc', 'desc'];
+        const sortOrder = validSorts.includes(sort.toLowerCase()) ? sort.toUpperCase() : 'DESC';
+
         // Get kehadiran data with pagination using Sequelize
         const { count, rows: kehadiran } = await Kehadiran.findAndCountAll({
-            where: {
-                absen_nip: user.username // Menggunakan username sebagai NIP
-            },
+            where: whereCondition,
             include: [{
                 model: Lokasi,
-                attributes: ['lat', 'lng', 'ket']
+                attributes: ['lat', 'lng', 'ket'],
+                required: false
             }],
             order: [
-                ['absen_tgl', 'DESC']
+                ['absen_tgl', sortOrder]
             ],
             offset,
             limit,
@@ -428,6 +454,11 @@ const getKehadiranByUserId = async(req, res) => {
                 totalItems: count,
                 itemsPerPage: limit,
             },
+            filters: {
+                start_date: start_date || null,
+                end_date: end_date || null,
+                sort: sort
+            }
         });
     } catch (error) {
         console.error('Get Kehadiran By User ID Error:', error);
@@ -451,7 +482,8 @@ const getKehadiran = async(req, res) => {
             },
             include: [{
                 model: Lokasi,
-                attributes: ['lat', 'lng', 'ket']
+                attributes: ['lat', 'lng', 'ket'],
+                required: false
             }],
             order: [
                 ['absen_tgl', 'DESC']
@@ -461,9 +493,34 @@ const getKehadiran = async(req, res) => {
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
 
+        // Get employee data from master database using utility
+        const pegawaiData = await getPegawaiByNip(userNip);
+
+        // Enrich kehadiran data with master employee data
+        const enrichedKehadiran = kehadiran.map(item => {
+            const kehadiranData = item.toJSON();
+            return {
+                ...kehadiranData,
+                pegawai: pegawaiData ? {
+                    nip: pegawaiData.NIP,
+                    nama: pegawaiData.NAMA,
+                    kdskpd: pegawaiData.KDSKPD,
+                    kdsatker: pegawaiData.KDSATKER,
+                    bidangf: pegawaiData.BIDANGF,
+                    jenis_pegawai: pegawaiData.JENIS_PEGAWAI,
+                    status_aktif: pegawaiData.STATUSAKTIF,
+                    skpd: pegawaiData.SkpdTbl ? {
+                        kdskpd: pegawaiData.SkpdTbl.KDSKPD,
+                        nmskpd: pegawaiData.SkpdTbl.NMSKPD,
+                        status_skpd: pegawaiData.SkpdTbl.StatusSKPD
+                    } : null
+                } : null
+            };
+        });
+
         res.status(200).json({
             success: true,
-            data: kehadiran,
+            data: enrichedKehadiran,
             pagination: {
                 currentPage: page,
                 totalPages: Math.ceil(count / limit),
@@ -560,11 +617,13 @@ const getAllKehadiran = async (req, res) => {
                 {
                     model: User,
                     attributes: ['username', 'email'],
-                    where: Object.keys(userWhere).length > 0 ? userWhere : undefined
+                    where: Object.keys(userWhere).length > 0 ? userWhere : undefined,
+                    required: false
                 },
                 {
                     model: Lokasi,
-                    attributes: ['lat', 'lng', 'ket']
+                    attributes: ['lat', 'lng', 'ket'],
+                    required: false
                 }
             ],
             order: [
@@ -572,12 +631,38 @@ const getAllKehadiran = async (req, res) => {
             ],
             offset,
             limit,
-
+            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
+
+        // Enrich kehadiran data with master employee data
+        const enrichedKehadiran = await Promise.all(kehadiran.map(async (item) => {
+            const kehadiranData = item.toJSON();
+            
+            // Get employee data from master database using utility
+            const pegawaiData = await getPegawaiByNip(kehadiranData.absen_nip);
+            
+            return {
+                ...kehadiranData,
+                pegawai: pegawaiData ? {
+                    nip: pegawaiData.NIP,
+                    nama: pegawaiData.NAMA,
+                    kdskpd: pegawaiData.KDSKPD,
+                    kdsatker: pegawaiData.KDSATKER,
+                    bidangf: pegawaiData.BIDANGF,
+                    jenis_pegawai: pegawaiData.JENIS_PEGAWAI,
+                    status_aktif: pegawaiData.STATUSAKTIF,
+                    skpd: pegawaiData.SkpdTbl ? {
+                        kdskpd: pegawaiData.SkpdTbl.KDSKPD,
+                        nmskpd: pegawaiData.SkpdTbl.NMSKPD,
+                        status_skpd: pegawaiData.SkpdTbl.StatusSKPD
+                    } : null
+                } : null
+            };
+        }));
 
         res.status(200).json({
             success: true,
-            data: kehadiran,
+            data: enrichedKehadiran,
             pagination: {
                 currentPage: page,
                 totalPages: Math.ceil(count / limit),
@@ -590,6 +675,67 @@ const getAllKehadiran = async (req, res) => {
         res.status(500).json({ error: 'Terjadi kesalahan server' });
     }
 };
+
+// Get detail kehadiran by ID (admin only)
+const getKehadiranById = async(req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get kehadiran by ID with user and lokasi details
+        const kehadiran = await Kehadiran.findByPk(id, {
+            include: [
+                {
+                    model: User,
+                    attributes: ['id', 'username', 'email', 'level', 'id_opd', 'id_upt', 'status'],
+                    required: false
+                },
+                {
+                    model: Lokasi,
+                    attributes: ['lokasi_id', 'lat', 'lng', 'range', 'ket', 'status'],
+                    required: false
+                }
+            ],
+            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
+        });
+
+        if (!kehadiran) {
+            return res.status(404).json({ error: 'Kehadiran tidak ditemukan' });
+        }
+
+        // Get employee data from master database using utility
+        const pegawaiData = await getPegawaiByNip(kehadiran.absen_nip);
+        
+        const kehadiranData = kehadiran.toJSON();
+        const enrichedKehadiran = {
+            ...kehadiranData,
+            pegawai: pegawaiData ? {
+                nip: pegawaiData.NIP,
+                nama: pegawaiData.NAMA,
+                kdskpd: pegawaiData.KDSKPD,
+                kdsatker: pegawaiData.KDSATKER,
+                bidangf: pegawaiData.BIDANGF,
+                jenis_pegawai: pegawaiData.JENIS_PEGAWAI,
+                status_aktif: pegawaiData.STATUSAKTIF,
+                email: pegawaiData.EMAIL,
+                notelp: pegawaiData.NOTELP,
+                skpd: pegawaiData.SkpdTbl ? {
+                    kdskpd: pegawaiData.SkpdTbl.KDSKPD,
+                    nmskpd: pegawaiData.SkpdTbl.NMSKPD,
+                    status_skpd: pegawaiData.SkpdTbl.StatusSKPD
+                } : null
+            } : null
+        };
+
+        res.status(200).json({
+            success: true,
+            data: enrichedKehadiran
+        });
+    } catch (error) {
+        console.error('Get Kehadiran By ID Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 
 // Get attendance history with filters
 const getAttendanceHistory = async(req, res) => {
@@ -810,39 +956,7 @@ const getMonthlyReport = async(req, res) => {
     }
 };
 
-// Get detail kehadiran by ID (admin only)
-const getKehadiranById = async(req, res) => {
-    try {
-        const { id } = req.params;
 
-        // Get kehadiran by ID with user and lokasi details
-        const kehadiran = await Kehadiran.findByPk(id, {
-            include: [
-                {
-                    model: User,
-                    attributes: ['id', 'username', 'email', 'level', 'id_opd', 'id_upt', 'status']
-                },
-                {
-                    model: Lokasi,
-                    attributes: ['lokasi_id', 'lat', 'lng', 'range', 'ket', 'status']
-                }
-            ],
-            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
-        });
-
-        if (!kehadiran) {
-            return res.status(404).json({ error: 'Kehadiran tidak ditemukan' });
-        }
-
-        res.status(200).json({
-            success: true,
-            data: kehadiran
-        });
-    } catch (error) {
-        console.error('Get Kehadiran By ID Error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-};
 
 // Fungsi untuk mendapatkan lokasi yang dapat diakses oleh user berdasarkan jadwal kegiatan
 const getUserAccessibleLocations = async(req, res) => {

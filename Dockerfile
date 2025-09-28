@@ -1,27 +1,37 @@
-# Use official Node.js runtime as base image
-FROM node:18-alpine
+# -------------------------
+# Stage 1: Build frontend
+# -------------------------
+FROM node:18-alpine AS frontend
+WORKDIR /frontend
 
-# Set working directory
+# Copy & install deps
+COPY presensi-web/package*.json ./
+RUN npm install
+
+# Copy source dan build
+COPY presensi-web/ .
+RUN npm run build
+
+# -------------------------
+# Stage 2: Backend + frontend
+# -------------------------
+FROM node:18-alpine AS backend
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
-
-# Install dependencies
+# Copy & install deps backend
+COPY api_absensi/package*.json ./
 RUN npm ci --only=production
 
-# Copy application code
-COPY . .
 
-# Create uploads directory
+# Copy backend source
+COPY api_absensi/ .
+
+# Copy hasil build frontend ke dalam backend
+COPY --from=frontend /frontend/dist ./presensi-web/dist
+
+# Pastikan ada folder uploads
 RUN mkdir -p uploads
 
-# Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node healthcheck.js || exit 1
-
-# Start the application
 CMD ["npm", "start"]

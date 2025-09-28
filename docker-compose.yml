@@ -4,38 +4,16 @@ services:
   # Main Database (MySQL)
   db-main:
     image: mysql:8.0
-    container_name: api_absensi_db_main
+    container_name: database-presensi
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: ekin
-      MYSQL_USER: root
-      MYSQL_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: ${DEV_MAIN_PASSWORD}
+      MYSQL_DATABASE: ${DEV_MAIN_DATABASE}
+      MYSQL_USER: ${DEV_MAIN_USERNAME}
     ports:
       - "3306:3306"
     volumes:
-      - db_main_data:/var/lib/mysql
-      - ./docker/mysql/init:/docker-entrypoint-initdb.d
-    networks:
-      - api_absensi_network
-
-  # Master Database (MySQL)
-  db-master:
-    image: mysql:8.0
-    container_name: api_absensi_db_master
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: esdamparkotagopar
-      MYSQL_USER: clonedbekin
-      MYSQL_PASSWORD: "XCRtfdjNKMLo$#@%5"
-    ports:
-      - "3307:3306"
-    volumes:
-      - db_master_data:/var/lib/mysql
-      - ./docker/mysql/master-init:/docker-entrypoint-initdb.d
-    networks:
-      - api_absensi_network
+      - db_data:/var/lib/mysql
 
   # API Application
   api:
@@ -44,48 +22,18 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      NODE_ENV: development
-      # Main Database
-      DEV_MAIN_USERNAME: root
-      DEV_MAIN_PASSWORD: rootpassword
-      DEV_MAIN_DATABASE: ekin
-      DEV_MAIN_HOST: 192.168.1.50
-      DEV_MAIN_DIALECT: mysql
-      DEV_MAIN_PORT: 3306
-      # Master Database
-      DEV_MASTER_USERNAME: clonedbekin
-      DEV_MASTER_PASSWORD: "XCRtfdjNKMLo$#@%5"
-      DEV_MASTER_DATABASE: esdamparkotagopar
-      DEV_MASTER_HOST: 192.168.1.60
-      DEV_MASTER_DIALECT: mysql
-      DEV_MASTER_PORT: 3306
-      # JWT
-      JWT_SECRET: G@4n^u9Z&kR!mN0vBfR7T#hX$2eLp0Q
-      JWT_REFRESH_SECRET: your_jwt_refresh_secret_key_here
-      # Firebase
-      FIREBASE_PROJECT_ID: absensi-ce8e2
-      FIREBASE_PRIVATE_KEY_ID: "e99975f06dc67edffe6233d619bd4656ff3f7d7c"
-      FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDaFkLA2l9D9KDK\nXVplG36dE2qcq+9dPDHZqZ5rNSjrYhQqw5tpfgMVRZCdqL4Nu5nV2NQXjL8aq+/F\nb00vgeget1siBqphSGZvND/tSbh5aFpggb/+gSJDYOT7OSSiaXVoAZzl3JF5Hr/0\nx5s27eH8hTF5a97jwk+u8m6q2b+D5p3jHi1PrHm7+Smq6K71YUBtwJtJixQECxvt\nk58tLNF5Tnq17GBczsWbzjnK/VuP2VtDL0ppyMcbao/cV9Mj/hhWo+6OHPWh6JY8\nSTOdgSmI8YjyQGWoXPuNKj9oUIfr4Bs9iHmzbwEz2vZHC5u8piazhY442GY1HfWs\nvpo5udkpAgMBAAECggEAWseJYd2EajUZ+SKCzjNzsM60QiMPsC+uUHxahSXLsq9Q\n1bw2pOLfRat/VyE2e2Dr2Cg5oNPleKS5WeXKq0vX43FPbgp4QaZxfTiyo4NcVq0p\ncaKQ2M/IA2QB7NEMfs6HIJQLS2NU6qXyIWI1Kdg7iXGn9nMAhK4NnTUs+9FH9w7y\n1NndyvFWwGat7B9T35GzaQHHmAIaNcq6QblgFELvjFzkjTU+3CyAlMcdFq4wnlqI\n/qiOQlKAiOjscGKdWNwi+HjGtNzyOHPtduOuRCxkmmB+XRP/DnFZCHlohchFmxjt\nWtrnsOOw8okBai2lYdmsGcWUd2cOxnCQzZBL25MWQQKBgQD9q1dQJNfZc+aHCP6Z\ndznUNdGsmMojRiqq8Yr/tDY/Zhpyrfu978T6FY9vsq7YLlUHVi2X+8c3fCW19vmB\nxWZaQ521+QDwGTynthTREQwqpuAXAtIx7j69rymKsOU0oQTmweCyskIxaNRuh0Pt\nr1jjKqzs3ChENY5tJ0dCOvmwIwKBgQDcFznZ+BbTKje8u1CiVza1sJo+egJiLbCL\nSyB6tXGns+S+0JgVuagUe9AdJZBb7L+RGW97rJwva9R9xMulWAwlLoqCBrx2PkqU\nyQJWdpXyDp0mSL7d+GzZLUHcNm+Sn2cP9j9mzNE0e6eZvKK/eUQfxHBLgaqE9+jN\ndMoi4chAQwKBgQCT35oagh/CB6pO9ZNVawcvCeCcuMS9I14kIIJi5W7qLl8kkv+5\njVhKYN8owgTiyL+Qc1BI1OEhGyHwnXR9jdFItTnupqVBUbTmH2KrLUDmbDkdsOtP\naA7zDHUvAEfdEjCFRGf0Q64Kl42ekQOsPxeV9X6w5PYkLQRF5SvJFBAR+QKBgQC3\nSZhiD5tii/wS7qO+LodfVA2ADjfB727g8dXAmy5ljQjoZ+rf3Nc/B8VPIKNSCp2W\nhuoywpLnYxN5EdTOg77JkDLFCjsU9ddChQuvWd6R0N3KrjZVwLdVPb1lWOgd4SYB\nQv+V6ugmnvv6qf+XGbRECGHEX93UEmkMAUD9P6525QKBgBX94XXf67HfbDy4YKuY\nK+Tkm7g40M1+Ij2IZ8YffGGmN+2LPpGuv3laXTBDcaJzI3RG9Ca3ZCUrnrnGsW1M\nuNq2WFKBZL8OC6EDGOC9T6HCzRSTCC5kiJlRiFu3++Zdv/iEVfOZIiSklQQnU8tr\nw5bdV3EPmcjt7fK8pslBPpMJ\n-----END PRIVATE KEY-----\n"
-      FIREBASE_CLIENT_EMAIL: "firebase-adminsdk-fbsvc@absensi-ce8e2.iam.gserviceaccount.com"
-      FIREBASE_CLIENT_ID: "106639326726844322802"
-      FIREBASE_AUTH_URI: "https://accounts.google.com/o/oauth2/auth"
-      FIREBASE_TOKEN_URI: "https://oauth2.googleapis.com/token"
-      FIREBASE_AUTH_PROVIDER_X509_CERT_URL: "https://www.googleapis.com/oauth2/v1/certs"
-      FIREBASE_CLIENT_X509_CERT_URL: "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40absensi-ce8e2.iam.gserviceaccount.com"
-      PORT: 3000
+    env_file:
+      - .env
     volumes:
       - ./uploads:/app/uploads
+      - /app/node_modules
+      - ./:/app
+
     depends_on:
       - db-main
-      - db-master
-    networks:
-      - api_absensi_network
+
 
 volumes:
-  db_main_data:
-  db_master_data:
+  db_data:
 
-networks:
-  api_absensi_network:
-    driver: bridge
+

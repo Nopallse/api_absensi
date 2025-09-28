@@ -4,17 +4,41 @@ const Sequelize = require("sequelize");
 // Get all Satker with employee count and admin info
 const getAllSatker = async (req, res) => {
   try {
-    // Ambil parameter pagination dari query
+    // Ambil parameter pagination, search, dan filter dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const { kdskpd, search } = req.query;
 
+    // Build where clause
+    let whereClause = {};
+    
     // Filter berdasarkan SKPD jika ada
-    const { kdskpd } = req.query;
-    const whereClause = kdskpd ? { KDSKPD: kdskpd } : {};
+    if (kdskpd) {
+      whereClause.KDSKPD = kdskpd;
+    }
 
-    // Hitung total data untuk informasi pagination
-    const totalSatker = await SatkerTbl.count({ where: whereClause });
+    // Search functionality
+    if (search) {
+      whereClause[Sequelize.Op.or] = [
+        { KDSATKER: { [Sequelize.Op.like]: `%${search}%` } },
+        { NMSATKER: { [Sequelize.Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // Hitung total data untuk informasi pagination (selalu filter SKPD aktif)
+    const totalSatker = await SatkerTbl.count({ 
+      where: whereClause,
+      include: [
+        {
+          model: SkpdTbl,
+          where: {
+            StatusSKPD: 'Aktif' // Selalu hanya SKPD aktif
+          },
+          required: true
+        }
+      ]
+    });
     const totalPages = Math.ceil(totalSatker / limit);
 
     // Ambil data Satker dengan pagination
@@ -23,7 +47,11 @@ const getAllSatker = async (req, res) => {
       include: [
         {
           model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
+          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
+          where: {
+            StatusSKPD: 'Aktif' // Selalu hanya SKPD aktif
+          },
+          required: true
         }
       ],
       limit: limit,
@@ -113,6 +141,10 @@ const getAllSatker = async (req, res) => {
       })
     );
 
+    // Build filter response
+    let filterResponse = {};
+    if (kdskpd) filterResponse.kdskpd = kdskpd;
+
     // Kirim response dengan informasi pagination
     res.json({
       data: satkerWithDetails,
@@ -122,7 +154,8 @@ const getAllSatker = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      filter: kdskpd ? { kdskpd } : null
+      filter: Object.keys(filterResponse).length > 0 ? filterResponse : null,
+      searchQuery: search || null
     });
   } catch (error) {
     console.error('GetAllSatker Error:', error);
@@ -130,105 +163,6 @@ const getAllSatker = async (req, res) => {
   }
 };
 
-// Search Satker by KDSATKER or NMSATKER
-const searchSatker = async (req, res) => {
-  try {
-    const { query } = req.query;
-
-    // Build where clause - if no query, get all satker
-    let whereClause = {};
-    
-    if (query) {
-      whereClause = {
-        [Sequelize.Op.or]: [
-          { KDSATKER: { [Sequelize.Op.like]: `%${query}%` } },
-          { NMSATKER: { [Sequelize.Op.like]: `%${query}%` } },
-        ],
-      };
-    }
-
-    const satkerList = await SatkerTbl.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-        }
-      ],
-      order: [['KDSATKER', 'ASC']]
-    });
-
-    if (satkerList.length === 0) {
-      const errorMessage = query 
-        ? "Satker tidak ditemukan" 
-        : "Tidak ada Satker tersedia";
-        
-      return res.status(404).json({ 
-        error: errorMessage,
-        searchQuery: query || null
-      });
-    }
-
-    // Tambahkan informasi detail
-    const satkerWithDetails = await Promise.all(
-      satkerList.map(async (satker) => {
-        const satkerData = satker.toJSON();
-        
-        try {
-          // Hitung jumlah karyawan
-          const employeeCount = await MstPegawai.count({
-            where: { KDSATKER: satker.KDSATKER }
-          });
-
-          // Ambil admin
-          const adminOpd = await AdmOpd.findAll({
-            where: { id_satker: satker.KDSATKER },
-            include: [{ model: User, attributes: ['id', 'username', 'email', 'level', 'status'] }]
-          });
-
-          const adminUpt = await AdmUpt.findAll({
-            where: { id_satker: satker.KDSATKER },
-            include: [{ model: User, attributes: ['id', 'username', 'email', 'level', 'status'] }]
-          });
-
-          const allAdmins = [
-            ...adminOpd.map(admin => ({ ...admin.User.toJSON(), kategori: admin.kategori, type: 'admin_opd' })),
-            ...adminUpt.map(admin => ({ ...admin.User.toJSON(), kategori: admin.kategori, umum: admin.umum, type: 'admin_upt' }))
-          ];
-
-          const bidangCount = await BidangTbl.count({
-            where: { KDSATKER: satker.KDSATKER }
-          });
-
-          return {
-            ...satkerData,
-            employee_count: employeeCount,
-            admin_count: allAdmins.length,
-            admins: allAdmins,
-            bidang_count: bidangCount
-          };
-        } catch (error) {
-          console.error(`Error getting details for Satker ${satker.KDSATKER}:`, error);
-          return {
-            ...satkerData,
-            employee_count: 0,
-            admin_count: 0,
-            admins: [],
-            bidang_count: 0
-          };
-        }
-      })
-    );
-
-    res.json({
-      data: satkerWithDetails,
-      searchQuery: query || null
-    });
-  } catch (error) {
-    console.error('SearchSatker Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
 // Get Satker by ID
 const getSatkerById = async (req, res) => {
@@ -362,7 +296,6 @@ const getSatkerBySkpd = async (req, res) => {
 
 module.exports = { 
   getAllSatker, 
-  searchSatker, 
   getSatkerById, 
   getSatkerBySkpd
 };

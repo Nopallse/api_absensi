@@ -31,9 +31,7 @@ const authMiddleware = (options = {}) => {
             device_id: user.device_id
           };
 
-          console.log(user);
           // Validasi level jika diperlukan
-          console.log(options.requireLevel);
           if (options.requireLevel && !checkUserLevel(user.level, options.requireLevel)) {
             return res.status(403).json({
               error: 'Akses ditolak. Level akses tidak mencukupi',

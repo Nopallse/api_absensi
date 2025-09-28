@@ -7,6 +7,8 @@ const {
   getSkpdIdByUserLevel, 
   searchUsersWithMasterData 
 } = require("../utils/userMasterUtils");
+const { getPegawaiByNip } = require("../utils/masterDbUtils");
+const { getLokasiByUserData } = require("../utils/locationUtils");
 
 const getUser = async (req, res) => {
   try {
@@ -34,7 +36,7 @@ const getAllUser = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const offset = (page - 1) * limit;
-  const { search, status } = req.query; // Support search dan status parameter
+  const { search, status, id_skpd: filter_skpd, id_satker: filter_satker, bidangf: filter_bidang } = req.query; // Support search, status, dan filter organisasi
     
     // Ambil level user dari request (req.user.level)
     const userLevel = req.user.level;
@@ -87,11 +89,18 @@ const getAllUser = async (req, res) => {
         ]
       };
 
-      if (id_skpd) {
+      // Apply organizational filters
+      let orgFilters = {};
+      if (id_skpd) orgFilters.KDSKPD = id_skpd;
+      if (filter_skpd) orgFilters.KDSKPD = filter_skpd;
+      if (filter_satker) orgFilters.KDSATKER = filter_satker;
+      if (filter_bidang) orgFilters.BIDANGF = filter_bidang;
+
+      if (Object.keys(orgFilters).length > 0) {
         masterSearchCondition = {
           [Op.and]: [
             masterSearchCondition,
-            { KDSKPD: id_skpd }
+            orgFilters
           ]
         };
       }
@@ -123,15 +132,22 @@ const getAllUser = async (req, res) => {
 
     } else {
       // Normal get all logic
-      if (id_skpd) {
+      // Build organizational filters
+      let orgFilters = {};
+      if (id_skpd) orgFilters.KDSKPD = id_skpd;
+      if (filter_skpd) orgFilters.KDSKPD = filter_skpd;
+      if (filter_satker) orgFilters.KDSATKER = filter_satker;
+      if (filter_bidang) orgFilters.BIDANGF = filter_bidang;
+
+      if (Object.keys(orgFilters).length > 0) {
         // Ambil data master terlebih dahulu untuk filter
-        const pegawaiWithSkpd = await MstPegawai.findAll({
-          where: { KDSKPD: id_skpd },
+        const pegawaiWithOrg = await MstPegawai.findAll({
+          where: orgFilters,
           attributes: ['NIP']
         });
 
         // Buat array NIP yang valid untuk filter
-        const validNips = pegawaiWithSkpd.map(p => p.NIP);
+        const validNips = pegawaiWithOrg.map(p => p.NIP);
 
         if (validNips.length === 0) {
           // Jika tidak ada data master, return empty
@@ -143,7 +159,7 @@ const getAllUser = async (req, res) => {
               currentPage: page,
               itemsPerPage: limit
             },
-            filter: { id_skpd }
+            filter: orgFilters
           });
         }
 
@@ -196,6 +212,13 @@ const getAllUser = async (req, res) => {
 
     const totalPages = Math.ceil(totalUsers / limit);
 
+    // Build filter response
+    let filterResponse = {};
+    if (id_skpd) filterResponse.id_skpd = id_skpd;
+    if (filter_skpd) filterResponse.id_skpd = filter_skpd;
+    if (filter_satker) filterResponse.id_satker = filter_satker;
+    if (filter_bidang) filterResponse.bidangf = filter_bidang;
+
     // Kirim response dengan informasi pagination
     res.json({
       data: users,
@@ -205,7 +228,7 @@ const getAllUser = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      filter: id_skpd ? { id_skpd } : null,
+      filter: Object.keys(filterResponse).length > 0 ? filterResponse : null,
       searchQuery: search || null
     });
   } catch (error) {
@@ -253,52 +276,29 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Dapatkan data user
-    const user = await User.findOne({
-      where: { id },
-      attributes: { exclude: ["password_hash"] }
-    });
+    // Gunakan utility untuk mendapatkan data user dengan master data
+    const userData = await getUserWithMasterData(id);
     
-    if (!user) {
+    if (!userData) {
       return res.status(404).json({ error: "User tidak ditemukan" });
     }
 
-    // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await MstPegawai.findOne({
-      where: { NIP: user.username }
-    });
+    // Buat userData object untuk lokasi utility
+    const locationUserData = {
+      kdskpd: userData.kdskpd,
+      kdsatker: userData.kdsatker,
+      bidangf: userData.bidangf
+    };
 
-    // Dapatkan lokasi berdasarkan SKPD/Satker/Bidang pegawai
-    let lokasiList = [];
-    let skpdInfo = null;
+    // Gunakan utility untuk mencari lokasi berdasarkan user data
+    const lokasiResult = await getLokasiByUserData(locationUserData);
 
-    if (pegawai) {
-      skpdInfo = {
-        kdskpd: pegawai.KDSKPD,
-        nama_pegawai: pegawai.NAMA,
-        pangkat: pegawai.KDPANGKAT,
-        jabatan: pegawai.JENIS_JABATAN
-      };
-
-      // Dapatkan lokasi berdasarkan SKPD/Satker/Bidang
-      lokasiList = await Lokasi.findAll({
-        where: {
-          [Op.or]: [
-            { id_skpd: pegawai.KDSKPD },
-            { id_satker: pegawai.KDSATKER },
-            { id_bidang: pegawai.KDBIDANG }
-          ],
-          status: true
-        }
-      });
-    }
-
-    // Format response
+    // Format response dengan data yang sudah diperkaya dari utility
     const response = {
-      ...user.toJSON(),
-      skpd_info: skpdInfo,
-      lokasi_list: lokasiList,
-      lokasi_count: lokasiList.length
+      ...userData,
+      lokasi: lokasiResult ? lokasiResult.data : null,
+      lokasi_level: lokasiResult ? lokasiResult.level : null,
+      lokasi_count: lokasiResult ? lokasiResult.count : 0
     };
 
     res.json(response);
@@ -443,9 +443,7 @@ const getMyLocation = async (req, res) => {
     const userNip = req.user.username;
     
     // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await MstPegawai.findOne({
-      where: { NIP: userNip }
-    });
+    const pegawai = await getPegawaiByNip(userNip);
 
     if (!pegawai) {
       return res.status(404).json({ 
@@ -453,26 +451,29 @@ const getMyLocation = async (req, res) => {
       });
     }
 
-    console.log(pegawai);
-    // Ambil lokasi berdasarkan SKPD/Satker/Bidang pegawai
-    const lokasi = await Lokasi.findAll({
-      where: {
-        [Op.or]: [
-          { id_skpd: pegawai.KDSKPD },
-          { id_satker: pegawai.KDSATKER },
-          { id_bidang: pegawai.BIDANGF }
-        ],
-        status: true
-      }
-    });
+    // Buat userData object dari data pegawai
+    const userData = {
+      kdskpd: pegawai.KDSKPD,
+      kdsatker: pegawai.KDSATKER,
+      bidangf: pegawai.BIDANGF
+    };
 
-    console.log(lokasi,">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+    // Gunakan utility untuk mendapatkan lokasi berdasarkan user data
+    const lokasiResult = await getLokasiByUserData(userData);
+
+    if (!lokasiResult) {
+      return res.status(404).json({ 
+        message: "Data lokasi tidak ditemukan untuk pegawai ini" 
+      });
+    }
 
     return res.status(200).json({
-      data: lokasi,
+      data: lokasiResult.data,
+      lokasi_level: lokasiResult.level,
+      lokasi_count: lokasiResult.count
     });
   } catch (error) {
-    console.error(error);
+    console.error('GetMyLocation Error:', error);
     return res.status(500).json({ 
       message: "Terjadi kesalahan server" 
     });

@@ -4,22 +4,91 @@ const Sequelize = require("sequelize");
 // Get all Bidang with employee count and admin info
 const getAllBidang = async (req, res) => {
   try {
-    // Ambil parameter pagination dari query
+    // Ambil parameter pagination, search, dan filter dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const { kdsatker, kdskpd, search } = req.query;
 
+    // Build where clause
+    let whereClause = {};
+    
     // Filter berdasarkan SATKER jika ada
-    const { kdsatker } = req.query;
-    const whereClause = kdsatker ? { KDSATKER: kdsatker } : {};
+    if (kdsatker) {
+      whereClause.KDSATKER = kdsatker;
+    }
 
-    // Hitung total data untuk informasi pagination
-    const totalBidang = await BidangTbl.count({ where: whereClause });
+    // Filter berdasarkan SKPD jika ada (akan diterapkan pada parent SKPD)
+    
+    // Jika ada filter SKPD dan Satker, pastikan Satker tersebut benar-benar milik SKPD tersebut
+    if (kdskpd && kdsatker) {
+      // Validasi bahwa Satker benar-benar milik SKPD yang diminta
+      const satkerValidation = await SatkerTbl.findOne({
+        where: {
+          KDSATKER: kdsatker,
+          KDSKPD: kdskpd
+        }
+      });
+      
+      if (!satkerValidation) {
+        // Jika Satker tidak ditemukan di SKPD tersebut, return empty
+        return res.json({
+          data: [],
+          pagination: {
+            totalItems: 0,
+            totalPages: 0,
+            currentPage: page,
+            itemsPerPage: limit
+          },
+          filter: {
+            kdsatker: kdsatker,
+            kdskpd: kdskpd
+          },
+          searchQuery: search || null,
+          message: `Satker ${kdsatker} tidak ditemukan di SKPD ${kdskpd}`
+        });
+      }
+    }
+
+    // Search functionality
+    if (search) {
+      whereClause[Sequelize.Op.or] = [
+        { BIDANGF: { [Sequelize.Op.like]: `%${search}%` } },
+        { NMBIDANG: { [Sequelize.Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // Hitung total data untuk informasi pagination (filter berdasarkan STATUS_BIDANG)
+    const totalBidang = await BidangTbl.count({ 
+      where: {
+        ...whereClause,
+        STATUS_BIDANG: '1' // Selalu hanya Bidang aktif
+      },
+      include: [
+        {
+          model: SatkerTbl,
+          include: [
+            {
+              model: SkpdTbl,
+              where: {
+                ...(kdskpd && { KDSKPD: kdskpd }),
+                StatusSKPD: 'Aktif' 
+              },
+              required: true
+            }
+          ],
+          required: true
+        }
+      ]
+    });
     const totalPages = Math.ceil(totalBidang / limit);
 
     // Ambil data Bidang dengan pagination
     const bidangList = await BidangTbl.findAll({
-      where: whereClause,
+      where: {
+        ...whereClause,
+        STATUS_BIDANG: '1' // Selalu hanya Bidang aktif
+      },
       include: [
         {
           model: SatkerTbl,
@@ -27,9 +96,15 @@ const getAllBidang = async (req, res) => {
           include: [
             {
               model: SkpdTbl,
-              attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
+              attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
+              where: {
+                ...(kdskpd && { KDSKPD: kdskpd }),
+                StatusSKPD: 'Aktif' 
+              },
+              required: true
             }
-          ]
+          ],
+          required: true
         }
       ],
       limit: limit,
@@ -43,74 +118,29 @@ const getAllBidang = async (req, res) => {
         const bidangData = bidang.toJSON();
         
         try {
-          // Hitung jumlah karyawan dari database master berdasarkan KDBIDANG
+          // Hitung jumlah karyawan dari database master berdasarkan BIDANGF
           const employeeCount = await MstPegawai.count({
-            where: { KDBIDANG: bidang.BIDANGF }
+            where: { BIDANGF: bidang.BIDANGF }
           });
-
-          // Ambil admin OPD dari database utama
-          const adminOpd = await AdmOpd.findAll({
-            where: { id_bidang: bidang.BIDANGF },
-            include: [
-              {
-                model: User,
-                attributes: ['id', 'username', 'email', 'level', 'status']
-              }
-            ]
-          });
-
-          // Ambil admin UPT dari database utama
-          const adminUpt = await AdmUpt.findAll({
-            where: { id_bidang: bidang.BIDANGF },
-            include: [
-              {
-                model: User,
-                attributes: ['id', 'username', 'email', 'level', 'status']
-              }
-            ]
-          });
-
-          // Format data admin
-          const adminOpdList = adminOpd.map(admin => ({
-            id: admin.User.id,
-            username: admin.User.username,
-            email: admin.User.email,
-            level: admin.User.level,
-            status: admin.User.status,
-            kategori: admin.kategori,
-            type: 'admin_opd'
-          }));
-
-          const adminUptList = adminUpt.map(admin => ({
-            id: admin.User.id,
-            username: admin.User.username,
-            email: admin.User.email,
-            level: admin.User.level,
-            status: admin.User.status,
-            kategori: admin.kategori,
-            umum: admin.umum,
-            type: 'admin_upt'
-          }));
-
-          const allAdmins = [...adminOpdList, ...adminUptList];
 
           return {
             ...bidangData,
-            employee_count: employeeCount,
-            admin_count: allAdmins.length,
-            admins: allAdmins
+            employee_count: employeeCount
           };
         } catch (error) {
           console.error(`Error getting details for Bidang ${bidang.BIDANGF}:`, error);
           return {
             ...bidangData,
-            employee_count: 0,
-            admin_count: 0,
-            admins: []
+            employee_count: 0
           };
         }
       })
     );
+
+    // Build filter response
+    let filterResponse = {};
+    if (kdsatker) filterResponse.kdsatker = kdsatker;
+    if (kdskpd) filterResponse.kdskpd = kdskpd;
 
     // Kirim response dengan informasi pagination
     res.json({
@@ -121,7 +151,8 @@ const getAllBidang = async (req, res) => {
         currentPage: page,
         itemsPerPage: limit
       },
-      filter: kdsatker ? { kdsatker } : null
+      filter: Object.keys(filterResponse).length > 0 ? filterResponse : null,
+      searchQuery: search || null
     });
   } catch (error) {
     console.error('GetAllBidang Error:', error);
@@ -129,105 +160,6 @@ const getAllBidang = async (req, res) => {
   }
 };
 
-// Search Bidang by BIDANGF or NMBIDANG
-const searchBidang = async (req, res) => {
-  try {
-    const { query } = req.query;
-
-    // Build where clause - if no query, get all bidang
-    let whereClause = {};
-    
-    if (query) {
-      whereClause = {
-        [Sequelize.Op.or]: [
-          { BIDANGF: { [Sequelize.Op.like]: `%${query}%` } },
-          { NMBIDANG: { [Sequelize.Op.like]: `%${query}%` } },
-        ],
-      };
-    }
-
-    const bidangList = await BidangTbl.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: SatkerTbl,
-          attributes: ['KDSATKER', 'NMSATKER', 'KDSKPD'],
-          include: [
-            {
-              model: SkpdTbl,
-              attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD']
-            }
-          ]
-        }
-      ],
-      order: [['BIDANGF', 'ASC']]
-    });
-
-    if (bidangList.length === 0) {
-      const errorMessage = query 
-        ? "Bidang tidak ditemukan" 
-        : "Tidak ada Bidang tersedia";
-        
-      return res.status(404).json({ 
-        error: errorMessage,
-        searchQuery: query || null
-      });
-    }
-
-    // Tambahkan informasi detail
-    const bidangWithDetails = await Promise.all(
-      bidangList.map(async (bidang) => {
-        const bidangData = bidang.toJSON();
-        
-        try {
-          // Hitung jumlah karyawan
-          const employeeCount = await MstPegawai.count({
-            where: { KDBIDANG: bidang.BIDANGF }
-          });
-
-          // Ambil admin
-          const adminOpd = await AdmOpd.findAll({
-            where: { id_bidang: bidang.BIDANGF },
-            include: [{ model: User, attributes: ['id', 'username', 'email', 'level', 'status'] }]
-          });
-
-          const adminUpt = await AdmUpt.findAll({
-            where: { id_bidang: bidang.BIDANGF },
-            include: [{ model: User, attributes: ['id', 'username', 'email', 'level', 'status'] }]
-          });
-
-          const allAdmins = [
-            ...adminOpd.map(admin => ({ ...admin.User.toJSON(), kategori: admin.kategori, type: 'admin_opd' })),
-            ...adminUpt.map(admin => ({ ...admin.User.toJSON(), kategori: admin.kategori, umum: admin.umum, type: 'admin_upt' }))
-          ];
-
-          return {
-            ...bidangData,
-            employee_count: employeeCount,
-            admin_count: allAdmins.length,
-            admins: allAdmins
-          };
-        } catch (error) {
-          console.error(`Error getting details for Bidang ${bidang.BIDANGF}:`, error);
-          return {
-            ...bidangData,
-            employee_count: 0,
-            admin_count: 0,
-            admins: []
-          };
-        }
-      })
-    );
-
-    res.json({
-      data: bidangWithDetails,
-      searchQuery: query || null
-    });
-  } catch (error) {
-    console.error('SearchBidang Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
 // Get Bidang by ID
 const getBidangById = async (req, res) => {
@@ -256,7 +188,7 @@ const getBidangById = async (req, res) => {
     try {
       // Hitung jumlah karyawan
       const employeeCount = await MstPegawai.count({
-        where: { KDBIDANG: bidangf }
+        where: { BIDANGF: bidangf }
       });
 
       // Ambil admin
@@ -330,7 +262,7 @@ const getBidangBySatker = async (req, res) => {
         
         try {
           const employeeCount = await MstPegawai.count({
-            where: { KDBIDANG: bidang.BIDANGF }
+            where: { BIDANGF: bidang.BIDANGF }
           });
 
           return {
@@ -359,7 +291,6 @@ const getBidangBySatker = async (req, res) => {
 
 module.exports = { 
   getAllBidang, 
-  searchBidang, 
   getBidangById, 
   getBidangBySatker
 };

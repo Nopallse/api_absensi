@@ -15,6 +15,7 @@ const getSatkerBySkpdHierarchy = async (req, res) => {
 
     // Build where clause - if no search, get all satker in SKPD
     let whereClause = { KDSKPD: kdskpd };
+    console.log(whereClause);
     
     if (search) {
       whereClause = {

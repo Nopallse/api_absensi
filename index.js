@@ -6,12 +6,12 @@ const kehadiranRoutes = require("./routes/kehadiran");
 const usersRoutes = require("./routes/user");
 const adminRoutes = require("./routes/admin");
 const adminOpdRoutes = require("./routes/adminOpd");
-const skpdRoutes = require("./routes/skpd");
 const lokasiRoutes = require("./routes/lokasi");
 const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
 const jadwalKegiatanLokasiSkpdRoutes = require("./routes/jadwalKegiatanLokasiSkpd");
 const docsRoutes = require("./routes/docs");
 const path = require("path");
+const distPath = path.join(__dirname, "presensi-web/dist");
 
 // Import database connections
 const { mainSequelize, masterSequelize } = require('./config/database');
@@ -51,17 +51,16 @@ app.use("/api/admin", adminOpdRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/kehadiran", kehadiranRoutes);
 app.use("/api/user", usersRoutes);
-app.use("/api/skpd", skpdRoutes);
 app.use("/api/lokasi", lokasiRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
 app.use("/api/docs", docsRoutes);
 
 // Static files and catch-all route should come AFTER API routes
-app.use(express.static(path.join(__dirname, "../presensi-web/dist")));
+app.use(express.static(distPath));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../presensi-web/dist/index.html"));
+  res.sendFile(path.join(distPath, "index.html"));
 });
 
 // Serve static files for Swagger UI
