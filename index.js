@@ -9,9 +9,10 @@ const adminOpdRoutes = require("./routes/adminOpd");
 const lokasiRoutes = require("./routes/lokasi");
 const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
 const jadwalKegiatanLokasiSkpdRoutes = require("./routes/jadwalKegiatanLokasiSkpd");
+const viewDaftarUnitKerjaRoutes = require("./routes/viewDaftarUnitKerja");
 const docsRoutes = require("./routes/docs");
 const path = require("path");
-const distPath = path.join(__dirname, "presensi-web/dist");
+const distPath = path.join(__dirname, "../fe/dist");
 
 // Import database connections
 const { mainSequelize, masterSequelize } = require('./config/database');
@@ -37,8 +38,16 @@ const syncDatabases = async () => {
     await mainSequelize.sync({ force: false });
     console.log('Database utama berhasil disinkronkan');
     
-    // Sync database master
-    await masterSequelize.sync({ force: false });
+    // Sync database master - hanya model yang perlu dibuat
+    const { MstPegawai, SkpdTbl, SatkerTbl, BidangTbl } = require('./models');
+    
+    // Sync hanya model yang benar-benar perlu dibuat tabel baru
+    // Model yang sudah ada seperti ViewDaftarUnitKerja dan BidangSub tidak perlu di-sync
+    await MstPegawai.sync({ force: false });
+    await SkpdTbl.sync({ force: false });
+    await SatkerTbl.sync({ force: false });
+    await BidangTbl.sync({ force: false });
+    
     console.log('Database master berhasil disinkronkan');
   } catch (error) {
     console.error('Error sinkronisasi database:', error);
@@ -54,6 +63,7 @@ app.use("/api/user", usersRoutes);
 app.use("/api/lokasi", lokasiRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
+app.use("/api/view-daftar-unit-kerja", viewDaftarUnitKerjaRoutes);
 app.use("/api/docs", docsRoutes);
 
 // Static files and catch-all route should come AFTER API routes

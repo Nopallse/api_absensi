@@ -9,6 +9,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'KDSKPD',
         targetKey: 'KDSKPD'
       });
+
+      // Relasi dengan view_daftar_unit_kerja berdasarkan NM_UNIT_KERJA
+      MstPegawai.belongsTo(models.ViewDaftarUnitKerja, {
+        foreignKey: 'NM_UNIT_KERJA',
+        targetKey: 'nm_unit_kerja',
+        as: 'unitKerja'
+      });
     }
   }
 

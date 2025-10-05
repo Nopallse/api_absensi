@@ -44,7 +44,6 @@ const login = async (req, res) => {
     const { username, password } = req.body;
     console.log(req.body);
     console.log(req.headers.device_id);
-    console.log(req.headers);
     
     // Find user with related admin data
     const user = await User.findOne({ 

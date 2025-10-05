@@ -1,6 +1,6 @@
 "use strict";
 
-const { User, MstPegawai, SkpdTbl, SatkerTbl, BidangTbl, AdmOpd, AdmUpt } = require("../models");
+const { User, MstPegawai, SkpdTbl, SatkerTbl, BidangTbl, AdmOpd, AdmUpt, ViewDaftarUnitKerja } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 
@@ -32,13 +32,12 @@ const mapUsersWithMasterData = async (users, options = {}) => {
       },
       include: [
         {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
-          required: false
+          model: ViewDaftarUnitKerja,
+          as: 'unitKerja'
         }
       ],
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'NM_UNIT_KERJA',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
@@ -113,7 +112,15 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         } : null,
         
         satker: satkerMap.get(pegawai.KDSATKER) || null,
-        bidang: bidangMap.get(pegawai.BIDANGF) || null
+        bidang: bidangMap.get(pegawai.BIDANGF) || null,
+        
+        // Data unit kerja dari relasi ViewDaftarUnitKerja
+        unitKerja: pegawai.unitKerja ? {
+          kd_unit_kerja: pegawai.unitKerja.kd_unit_kerja,
+          nm_unit_kerja: pegawai.unitKerja.nm_unit_kerja,
+          jenis: pegawai.unitKerja.jenis,
+          status: pegawai.unitKerja.status
+        } : null
       });
     });
 
@@ -152,7 +159,8 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           // Data relasi
           skpd: masterData.skpd,
           satker: masterData.satker,
-          bidang: masterData.bidang
+          bidang: masterData.bidang,
+          unitKerja: masterData.unitKerja
         };
       } else {
         // Jika tidak ada data master, tetap return data user dengan field kosong
@@ -175,10 +183,10 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           email: null,
           foto: null,
           jenis_pegawai: null,
-          status_aktif: null,
-          skpd: null,
+          status_aktif: "AKTIF",
           satker: null,
-          bidang: null
+          bidang: null,
+          unitKerja: null
         };
       }
     });
@@ -202,12 +210,12 @@ const getUserWithMasterData = async (userId, options = {}) => {
       include: [
         {
           model: AdmOpd,
-          attributes: ['id_skpd', 'id_satker', 'id_bidang', 'kategori'],
+          attributes: [ 'id_satker', 'id_bidang', 'kategori'],
           required: false
         },
         {
           model: AdmUpt,
-          attributes: ['id_skpd', 'id_satker', 'id_bidang', 'kategori', 'umum'],
+          attributes: [ 'id_satker', 'id_bidang', 'kategori', 'umum'],
           required: false
         }
       ]
@@ -222,13 +230,12 @@ const getUserWithMasterData = async (userId, options = {}) => {
       where: { NIP: user.username },
       include: [
         {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
-          required: false
+          model: ViewDaftarUnitKerja,
+          as: 'unitKerja'
         }
       ],
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'NM_UNIT_KERJA',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
@@ -265,7 +272,8 @@ const getUserWithMasterData = async (userId, options = {}) => {
         // Data master pegawai
         nama: masterData.NAMA,
         nip: masterData.NIP,
-        kdskpd: masterData.KDSKPD,
+        // kdskpd: masterData.KDSKPD,
+        nm_unit_kerja: masterData.NM_UNIT_KERJA,
         kdsatker: masterData.KDSATKER,
         bidangf: masterData.BIDANGF,
         kdpangkat: masterData.KDPANGKAT,
@@ -283,11 +291,11 @@ const getUserWithMasterData = async (userId, options = {}) => {
         status_aktif: masterData.STATUSAKTIF,
         
         // Data relasi
-        skpd: masterData.SkpdTbl ? {
-          kdskpd: masterData.SkpdTbl.KDSKPD,
-          nmskpd: masterData.SkpdTbl.NMSKPD,
-          status_skpd: masterData.SkpdTbl.StatusSKPD
-        } : null,
+        // skpd: masterData.SkpdTbl ? {
+        //   kdskpd: masterData.SkpdTbl.KDSKPD,
+        //   nmskpd: masterData.SkpdTbl.NMSKPD,
+        //   status_skpd: masterData.SkpdTbl.StatusSKPD
+        // } : null,
         
         satker: satkerData ? {
           kdsatker: satkerData.KDSATKER,
@@ -297,8 +305,21 @@ const getUserWithMasterData = async (userId, options = {}) => {
         bidang: bidangData ? {
           bidangf: bidangData.BIDANGF,
           nmbidang: bidangData.NMBIDANG
+        } : null,
+        
+        // Data unit kerja dari relasi ViewDaftarUnitKerja
+        unitKerja: masterData.unitKerja ? {
+          kd_unit_kerja: masterData.unitKerja.kd_unit_kerja,
+          nm_unit_kerja: masterData.unitKerja.nm_unit_kerja,
+          jenis: masterData.unitKerja.jenis,
+          status: masterData.unitKerja.status
         } : null
       };
+    }
+
+    // Jika tidak ada data master, tambahkan default status_aktif
+    if (!masterData) {
+      userData.status_aktif = "AKTIF";
     }
 
     return userData;

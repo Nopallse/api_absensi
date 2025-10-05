@@ -20,7 +20,6 @@ const getUser = async (req, res) => {
       return res.status(404).json({ error: "User tidak ditemukan" });
     }
 
-    console.log(userData,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
     res.json(userData);
   } catch (error) {
@@ -57,7 +56,6 @@ const getAllUser = async (req, res) => {
       id_skpd = getSkpdIdByUserLevel(user, userLevel);
     }
 
-    console.log(id_skpd,"<<<<<<<s<<<<<<<<<<<<<<<<<<<<<<");
 
     let totalUsers;
     let users;
@@ -65,7 +63,7 @@ const getAllUser = async (req, res) => {
     // Jika ada search query, gunakan search function
     if (search) {
       // Tambahkan status ke filter jika ada
-      users = await searchUsersWithMasterData(search, id_skpd, { limit, offset, order: [['id', 'DESC']], status });
+      users = await searchUsersWithMasterData(search, id_skpd, { limit, offset, order: [['id', 'DESC']] });
 
       if (users.length === 0) {
         return res.json({
@@ -105,10 +103,7 @@ const getAllUser = async (req, res) => {
         };
       }
 
-      // Count total matching records in master data
-      const masterCount = await MstPegawai.count({
-        where: masterSearchCondition
-      });
+
 
       // Count how many of those NIPs exist in User table
       const masterNips = await MstPegawai.findAll({
@@ -169,9 +164,7 @@ const getAllUser = async (req, res) => {
             [Op.in]: validNips
           }
         };
-        if (status !== undefined) {
-          userWhere.status = status;
-        }
+
         totalUsers = await User.count({
           where: userWhere
         });
@@ -191,9 +184,7 @@ const getAllUser = async (req, res) => {
       } else {
         // Tanpa filter - ambil semua data dengan pagination dan urutkan DESC
         let userWhere = {};
-        if (status !== undefined) {
-          userWhere.status = status;
-        }
+      
         totalUsers = await User.count({
           where: userWhere
         });

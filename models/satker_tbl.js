@@ -15,6 +15,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'KDSATKER',
         sourceKey: 'KDSATKER'
       });
+
+      // Relasi dengan ViewDaftarUnitKerja (One to Many)
+      SatkerTbl.hasMany(models.ViewDaftarUnitKerja, {
+        foreignKey: 'kd_unit_kerja',
+        sourceKey: 'KDSATKER',
+        as: 'viewUnitKerja'
+      });
     }
   }
 

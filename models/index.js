@@ -19,7 +19,9 @@ fs
       file !== 'mstpegawai.js' && // Exclude master models
       file !== 'skpd_tbl.js' &&    // Exclude master models
       file !== 'satker_tbl.js' &&  // Exclude master models
-      file !== 'bidang_tbl.js'     // Exclude master models
+      file !== 'bidang_tbl.js' &&  // Exclude master models
+      file !== 'view_daftar_unit_kerja.js' && // Exclude master models
+      file !== 'bidang_sub.js'     // Exclude master models
     );
   })
   .forEach(file => {
@@ -39,6 +41,12 @@ db[satkerTblModel.name] = satkerTblModel;
 
 const bidangTblModel = require('./bidang_tbl.js')(masterSequelize, Sequelize.DataTypes);
 db[bidangTblModel.name] = bidangTblModel;
+
+const viewDaftarUnitKerjaModel = require('./view_daftar_unit_kerja.js')(masterSequelize, Sequelize.DataTypes);
+db[viewDaftarUnitKerjaModel.name] = viewDaftarUnitKerjaModel;
+
+const bidangSubModel = require('./bidang_sub.js')(masterSequelize, Sequelize.DataTypes);
+db[bidangSubModel.name] = bidangSubModel;
 
 // Load model jadwal kegiatan dari database utama
 const masterJadwalKegiatanModel = require('./masterJadwalKegiatan.js')(mainSequelize, Sequelize.DataTypes);
