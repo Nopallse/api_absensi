@@ -38,7 +38,6 @@ const getTodayActivities = async (kdsatker) => {
         ['jam_mulai', 'ASC']
       ]
     });
-    console.log(activities," activities<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
     // Filter kegiatan yang memiliki lokasi di satker yang sama
     const filteredActivities = activities.filter(activity => {

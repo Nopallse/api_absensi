@@ -901,55 +901,48 @@ const getAttendanceHistory = async(req, res) => {
                 {
                     model: Lokasi,
                     attributes: ['lat', 'lng', 'ket']
+                },
+                {
+                    model: MasterJadwalKegiatan,
+                    as: 'kegiatan',
+                    attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'],
+                    required: false
                 }
             ],
             order: [
-                ['absen_tgl', 'ASC']
+                ['absen_tgl', 'DESC'],
+                ['absen_tgljam', 'DESC']
             ],
             offset,
             limit,
-            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
+            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore', 'jenis_kehadiran', 'id_kegiatan']
         });
         
         console.log('Total count:', count);
         console.log('Attendances found:', attendances.length);
 
 
-        // Calculate statistics
-        const statistics = await Kehadiran.findAll({
-            where: whereClause,
-            attributes: [
-                'absen_kat',
-                'absen_sore', [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count'],
-            ],
-            group: ['absen_kat', 'absen_sore'],
-        });
+  
 
-        // Process statistics
-        const statsProcessed = {
-            total: count,
-            hadir: 0,
-            izin: 0,
-            sakit: 0,
-            cuti: 0,
-            dinas: 0,
-            telat: 0,
-            pulangAwal: 0,
-        };
-
-        statistics.forEach((stat) => {
-            if (stat.absen_kat === 'hadir') statsProcessed.hadir += parseInt(stat.dataValues.count);
-            if (stat.absen_kat === 'izin') statsProcessed.izin += parseInt(stat.dataValues.count);
-            if (stat.absen_kat === 'sakit') statsProcessed.sakit += parseInt(stat.dataValues.count);
-            if (stat.absen_kat === 'cuti') statsProcessed.cuti += parseInt(stat.dataValues.count);
-            if (stat.absen_kat === 'dinas') statsProcessed.dinas += parseInt(stat.dataValues.count);
-            if (stat.absen_kat === 'telat') statsProcessed.telat += parseInt(stat.dataValues.count);
-            if (stat.absen_sore === 'awal') statsProcessed.pulangAwal += parseInt(stat.dataValues.count);
-        });
 
         // Format the attendance data
         const formattedAttendances = attendances.map(attendance => {
-            const { absen_id, absen_nip, absen_tgl, absen_tgljam, absen_checkin, absen_checkout, absen_kat, absen_apel, absen_sore, User: user, Lokasi: lokasi } = attendance;
+            const { 
+                absen_id, 
+                absen_nip, 
+                absen_tgl, 
+                absen_tgljam, 
+                absen_checkin, 
+                absen_checkout, 
+                absen_kat, 
+                absen_apel, 
+                absen_sore, 
+                jenis_kehadiran,
+                id_kegiatan,
+                User: user, 
+                Lokasi: lokasi,
+                kegiatan
+            } = attendance;
 
             return {
                 absen_id: absen_id,
@@ -961,6 +954,8 @@ const getAttendanceHistory = async(req, res) => {
                 absen_kat: absen_kat,
                 absen_apel: absen_apel,
                 absen_sore: absen_sore,
+                jenis_kehadiran: jenis_kehadiran,
+                id_kegiatan: id_kegiatan,
                 user: user ? {
                     username: user.username,
                     email: user.email
@@ -969,6 +964,13 @@ const getAttendanceHistory = async(req, res) => {
                     lat: lokasi.lat,
                     lng: lokasi.lng,
                     keterangan: lokasi.ket
+                } : null,
+                kegiatan: kegiatan ? {
+                    id_kegiatan: kegiatan.id_kegiatan,
+                    jenis_kegiatan: kegiatan.jenis_kegiatan,
+                    keterangan: kegiatan.keterangan,
+                    jam_mulai: kegiatan.jam_mulai,
+                    jam_selesai: kegiatan.jam_selesai
                 } : null
             };
         });
@@ -976,7 +978,6 @@ const getAttendanceHistory = async(req, res) => {
         res.status(200).json({
             success: true,
             data: formattedAttendances,
-            statistics: statsProcessed,
             pagination: {
                 currentPage: page,
                 totalPages: Math.ceil(count / limit),

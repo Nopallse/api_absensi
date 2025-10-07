@@ -18,7 +18,6 @@ const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = nul
       });
 
       if (subBidangLocation) {
-        console.log(subBidangLocation," lokasi sub<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
         return {
           ...subBidangLocation.toJSON(),
           level: 'sub_bidang',
@@ -29,7 +28,6 @@ const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = nul
 
     // Jika ada bidang, cari lokasi khusus bidang
     if (idBidang) {
-      console.log(idBidang," id bidang<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
       const bidangLocation = await Lokasi.findOne({
         where: {
           id_satker: idSatker,
@@ -40,7 +38,6 @@ const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = nul
       });
 
       if (bidangLocation) {
-        console.log(bidangLocation," lokasi bidang<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
         return {
           ...bidangLocation.toJSON(),
           level: 'bidang',
