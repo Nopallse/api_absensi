@@ -35,6 +35,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(200),
         allowNull: false,
         comment: 'Keterangan detail kegiatan'
+      },
+      jam_mulai: {
+        type: DataTypes.TIME,
+        allowNull: true,
+        comment: 'Jam mulai kegiatan dalam format HH:MM:SS'
+      },
+      jam_selesai: {
+        type: DataTypes.TIME,
+        allowNull: true,
+        comment: 'Jam selesai kegiatan dalam format HH:MM:SS'
       }
     },
     {

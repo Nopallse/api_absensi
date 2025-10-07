@@ -4,7 +4,7 @@ const { requireSuperAdmin } = require("../middlewares/authMiddleware");
 const { adminLogMiddleware, adminAuthLogMiddleware, adminDeviceResetLogMiddleware } = require("../middlewares/adminLogMiddleware");
 const {
   createLokasi,
-  getLokasi,
+  getAllLokasi,
   getLokasiById,
   updateLokasi,
   deleteLokasi,
@@ -34,7 +34,6 @@ const {
     deleteOrganizationAssignment,
     toggleOrganizationAssignmentStatus
 } = require("../controllers/jamDinasController");
-const { getAllSkpd, getSkpdById } = require("../controllers/skpdController");
 const { getAllSatker, searchSatker, getSatkerById, getSatkerBySkpd } = require("../controllers/satkerController");
 const { getAllBidang, searchBidang, getBidangById, getBidangBySatker } = require("../controllers/bidangController");
 const { 
@@ -107,7 +106,7 @@ router.get("/dashboard/super-admin",
     }),
     createLokasi
   );
-  router.get("/lokasi", requireSuperAdmin(), getLokasi);
+  router.get("/lokasi", requireSuperAdmin(), getAllLokasi);
   router.get("/lokasi/:lokasi_id", requireSuperAdmin(), getLokasiById);
   router.patch("/lokasi/:lokasi_id", 
     requireSuperAdmin(), 
@@ -263,8 +262,6 @@ router.delete("/jam-dinas-details/:id",
 );
 
 
-router.get("/skpd", requireSuperAdmin(), getAllSkpd);
-router.get("/skpd/:kdskpd", requireSuperAdmin(), getSkpdById);
 
 // Level 2: SKPD -> Satker (Second Level)
 router.get("/skpd/:kdskpd/satker", requireSuperAdmin(), getSatkerBySkpdHierarchy);

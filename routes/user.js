@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { requireAuth, requireUserDeviceCheck } = require("../middlewares/authMiddleware");
-const {getAttendanceHistory ,getKehadiranToday,createKehadiran } = require("../controllers/kehadiranController");
-const { getUser,saveFcmToken, resetDeviceId, getMyLocation } = require("../controllers/userController");
+const {getAttendanceHistory ,getKehadiranToday,createKehadiran, createKehadiranKegiatan, getKehadiranKegiatan } = require("../controllers/kehadiranController");
+const { getUser,saveFcmToken, resetDeviceId, getMyLocation, getTodayActivitiesEndpoint } = require("../controllers/userController");
 const { resetDeviceSelf, registerNewDevice, requestDeviceReset, getMyResetRequests } = require("../controllers/deviceResetController");
 
 // Semua routes memerlukan authentication
@@ -15,6 +15,11 @@ router.get("/", getUser);
 router.get("/kehadiran",getAttendanceHistory)
 router.post("/kehadiran", createKehadiran);
 router.get("/kehadiran/today", getKehadiranToday);
+router.post("/kehadiran/kegiatan", createKehadiranKegiatan);
+
+router.get("/kehadiran/kegiatan", getKehadiranKegiatan);
+
+
 router.get("/lokasi", getMyLocation);
 router.post("/fcm-token", saveFcmToken);
 

@@ -14,6 +14,27 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "lokasi_id",
         otherKey: "id_kegiatan"
       });
+
+      // Relasi dengan satker (Level 1)
+      Lokasi.belongsTo(models.SatkerTbl, {
+        foreignKey: 'id_satker',
+        targetKey: 'KDSATKER',
+        as: 'satker'
+      });
+
+      // Relasi dengan bidang (Level 2)
+      Lokasi.belongsTo(models.BidangTbl, {
+        foreignKey: 'id_bidang',
+        targetKey: 'BIDANGF',
+        as: 'bidang'
+      });
+
+      // Relasi dengan sub bidang (Level 3)
+      Lokasi.belongsTo(models.BidangSub, {
+        foreignKey: 'id_sub_bidang',
+        targetKey: 'SUBF',
+        as: 'subBidang'
+      });
     }
   }
 
@@ -38,17 +59,20 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         comment: 'Radius dalam meter'
       },
-      id_skpd: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       id_satker: {
         type: DataTypes.STRING,
         allowNull: true,
+        comment: 'ID satker (Level 1) - wajib diisi'
       },
       id_bidang: {
         type: DataTypes.STRING,
         allowNull: true,
+        comment: 'ID bidang (Level 2) - opsional, jika diisi maka lokasi khusus untuk bidang'
+      },
+      id_sub_bidang: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'ID sub bidang (Level 3) - opsional, jika diisi maka lokasi khusus untuk sub bidang'
       },
       ket: {
         type: DataTypes.STRING,

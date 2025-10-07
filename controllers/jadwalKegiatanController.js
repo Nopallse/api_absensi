@@ -67,14 +67,27 @@ const getAllJadwalKegiatan = async (req, res) => {
 // Menambah jadwal kegiatan baru
 const createJadwalKegiatan = async (req, res) => {
     try {
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai } = req.body;
         
         // Validasi input
         if (!tanggal_kegiatan || !jenis_kegiatan || !keterangan) {
             return res.status(400).json({
                 success: false,
-                error: 'Semua field harus diisi'
+                error: 'Tanggal kegiatan, jenis kegiatan, dan keterangan wajib diisi'
             });
+        }
+        
+        // Validasi jam jika ada
+        if (jam_mulai && jam_selesai) {
+            const jamMulai = new Date(`2000-01-01T${jam_mulai}`);
+            const jamSelesai = new Date(`2000-01-01T${jam_selesai}`);
+            
+            if (jamMulai >= jamSelesai) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Jam selesai harus lebih besar dari jam mulai'
+                });
+            }
         }
         
         // Cek apakah sudah ada jadwal untuk tanggal tersebut
@@ -92,7 +105,9 @@ const createJadwalKegiatan = async (req, res) => {
         const newJadwal = await MasterJadwalKegiatan.create({
             tanggal_kegiatan,
             jenis_kegiatan,
-            keterangan
+            keterangan,
+            jam_mulai: jam_mulai || null,
+            jam_selesai: jam_selesai || null
         });
         
         res.status(201).json({
@@ -114,7 +129,7 @@ const createJadwalKegiatan = async (req, res) => {
 const updateJadwalKegiatan = async (req, res) => {
     try {
         const { id_kegiatan } = req.params;
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai } = req.body;
         
         const jadwal = await MasterJadwalKegiatan.findByPk(id_kegiatan);
         if (!jadwal) {
@@ -122,6 +137,19 @@ const updateJadwalKegiatan = async (req, res) => {
                 success: false,
                 error: 'Jadwal kegiatan tidak ditemukan'
             });
+        }
+        
+        // Validasi jam jika ada
+        if (jam_mulai && jam_selesai) {
+            const jamMulai = new Date(`2000-01-01T${jam_mulai}`);
+            const jamSelesai = new Date(`2000-01-01T${jam_selesai}`);
+            
+            if (jamMulai >= jamSelesai) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Jam selesai harus lebih besar dari jam mulai'
+                });
+            }
         }
         
         // Jika tanggal diubah, cek apakah sudah ada jadwal lain untuk tanggal tersebut
@@ -144,7 +172,9 @@ const updateJadwalKegiatan = async (req, res) => {
         await jadwal.update({
             tanggal_kegiatan: tanggal_kegiatan || jadwal.tanggal_kegiatan,
             jenis_kegiatan: jenis_kegiatan || jadwal.jenis_kegiatan,
-            keterangan: keterangan || jadwal.keterangan
+            keterangan: keterangan || jadwal.keterangan,
+            jam_mulai: jam_mulai !== undefined ? jam_mulai : jadwal.jam_mulai,
+            jam_selesai: jam_selesai !== undefined ? jam_selesai : jadwal.jam_selesai
         });
         
         res.status(200).json({
@@ -213,11 +243,11 @@ const getJadwalKegiatanById = async (req, res) => {
             });
         }
         
-        // Dapatkan data SKPD untuk setiap lokasi
-        const lokasiWithSkpd = [];
+        // Dapatkan data Satker untuk setiap lokasi
+        const lokasiWithSatker = [];
         if (jadwal.Lokasis && jadwal.Lokasis.length > 0) {
             for (const lokasi of jadwal.Lokasis) {
-                const skpdList = await JadwalKegiatanLokasiSkpd.findAll({
+                const satkerList = await JadwalKegiatanLokasiSkpd.findAll({
                     where: {
                         id_kegiatan: id_kegiatan,
                         lokasi_id: lokasi.lokasi_id
@@ -225,9 +255,9 @@ const getJadwalKegiatanById = async (req, res) => {
                     attributes: ['kdskpd']
                 });
                 
-                lokasiWithSkpd.push({
+                lokasiWithSatker.push({
                     ...lokasi.toJSON(),
-                    skpd_list: skpdList.map(s => s.kdskpd)
+                    satker_list: satkerList.map(s => s.kdskpd) // kdskpd sekarang berisi kode satker
                 });
             }
         }
@@ -236,7 +266,7 @@ const getJadwalKegiatanById = async (req, res) => {
             success: true,
             data: {
                 ...jadwal.toJSON(),
-                lokasi_list: lokasiWithSkpd
+                lokasi_list: lokasiWithSatker
             }
         });
     } catch (error) {
@@ -326,10 +356,10 @@ const getLokasiKegiatan = async (req, res) => {
                     ket: item.Lokasi.ket,
                     status: item.Lokasi.status,
                     range: item.Lokasi.range,
-                    skpd_list: []
+                    satker_list: [] // kdskpd sekarang berisi kode satker
                 });
             }
-            lokasiMap.get(lokasiId).skpd_list.push(item.kdskpd);
+            lokasiMap.get(lokasiId).satker_list.push(item.kdskpd);
         });
         
         const lokasiList = Array.from(lokasiMap.values());
@@ -361,13 +391,13 @@ const getLokasiKegiatan = async (req, res) => {
 const addLokasiToKegiatan = async (req, res) => {
     try {
         const { id_kegiatan } = req.params;
-        const { lokasi_id, kdskpd_list } = req.body;
+        const { lokasi_id, kdsatker_list } = req.body; // Ubah dari kdskpd_list ke kdsatker_list
         
         // Validasi input
-        if (!lokasi_id || !kdskpd_list || !Array.isArray(kdskpd_list)) {
+        if (!lokasi_id || !kdsatker_list || !Array.isArray(kdsatker_list)) {
             return res.status(400).json({
                 success: false,
-                error: 'lokasi_id dan kdskpd_list (array) harus diisi'
+                error: 'lokasi_id dan kdsatker_list (array) harus diisi'
             });
         }
         
@@ -378,7 +408,7 @@ const addLokasiToKegiatan = async (req, res) => {
         console.log('Input values:', {
             id_kegiatan: kegiatanId,
             lokasi_id: lokasiId,
-            kdskpd_list
+            kdsatker_list
         });
         
         // Cek apakah jadwal kegiatan ada
@@ -400,45 +430,45 @@ const addLokasiToKegiatan = async (req, res) => {
             });
         }
         
-        // Debug: tampilkan SKPD yang sudah ada untuk lokasi ini
-        const currentSkpd = await JadwalKegiatanLokasiSkpd.findAll({
+        // Debug: tampilkan Satker yang sudah ada untuk lokasi ini
+        const currentSatker = await JadwalKegiatanLokasiSkpd.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId },
             attributes: ['kdskpd']
         });
-        console.log('Current SKPD for this location:', currentSkpd.map(s => s.kdskpd));
+        console.log('Current Satker for this location:', currentSatker.map(s => s.kdskpd));
         
-        // Tambahkan SKPD ke lokasi kegiatan
+        // Tambahkan Satker ke lokasi kegiatan
         const relasiList = [];
-        const existingSkpd = [];
+        const existingSatker = [];
         
-        for (const kdskpd of kdskpd_list) {
+        for (const kdsatker of kdsatker_list) {
             try {
-                console.log(`Processing SKPD: ${kdskpd}`);
+                console.log(`Processing Satker: ${kdsatker}`);
                 
-                // Cek apakah kombinasi id_kegiatan, lokasi_id, dan kdskpd sudah ada
+                // Cek apakah kombinasi id_kegiatan, lokasi_id, dan kdsatker sudah ada
                 const existingRelasi = await JadwalKegiatanLokasiSkpd.findOne({
-                    where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId, kdskpd }
+                    where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId, kdskpd: kdsatker }
                 });
                 
                 if (existingRelasi) {
-                    existingSkpd.push(kdskpd);
-                    console.log(`SKPD ${kdskpd} sudah ada untuk lokasi ini`);
+                    existingSatker.push(kdsatker);
+                    console.log(`Satker ${kdsatker} sudah ada untuk lokasi ini`);
                     continue;
                 }
                 
-                console.log(`Creating new relation for SKPD: ${kdskpd}`);
+                console.log(`Creating new relation for Satker: ${kdsatker}`);
                 const relasi = await JadwalKegiatanLokasiSkpd.create({
                     id_kegiatan: kegiatanId,
                     lokasi_id: lokasiId,
-                    kdskpd
+                    kdskpd: kdsatker // Field kdskpd tetap sama, tapi sekarang berisi kode satker
                 });
                 relasiList.push(relasi);
-                console.log(`SKPD ${kdskpd} berhasil ditambahkan dengan ID: ${relasi.id}`);
+                console.log(`Satker ${kdsatker} berhasil ditambahkan dengan ID: ${relasi.id}`);
             } catch (error) {
                 // Jika ada error (misal duplikasi), skip
-                console.log(`SKPD ${kdskpd} error:`, error.message);
+                console.log(`Satker ${kdsatker} error:`, error.message);
                 console.log('Full error:', error);
-                existingSkpd.push(kdskpd);
+                existingSatker.push(kdsatker);
             }
         }
         
@@ -446,7 +476,7 @@ const addLokasiToKegiatan = async (req, res) => {
             success: true,
             message: relasiList.length > 0 
                 ? 'Lokasi berhasil ditambahkan ke jadwal kegiatan' 
-                : 'Semua SKPD sudah ada untuk lokasi ini',
+                : 'Semua Satker sudah ada untuk lokasi ini',
             data: {
                 id_kegiatan: kegiatanId,
                 lokasi_id: lokasiId,
@@ -456,14 +486,14 @@ const addLokasiToKegiatan = async (req, res) => {
                     lat: lokasi.lat,
                     lng: lokasi.lng
                 },
-                skpd_added: relasiList.length,
-                skpd_list: relasiList.map(r => r.kdskpd),
-                existing_skpd: existingSkpd.length > 0 ? existingSkpd : undefined,
-                total_requested: kdskpd_list.length,
+                satker_added: relasiList.length,
+                satker_list: relasiList.map(r => r.kdskpd),
+                existing_satker: existingSatker.length > 0 ? existingSatker : undefined,
+                total_requested: kdsatker_list.length,
                 summary: {
                     success: relasiList.length,
-                    already_exists: existingSkpd.length,
-                    total: kdskpd_list.length
+                    already_exists: existingSatker.length,
+                    total: kdsatker_list.length
                 }
             }
         });
@@ -626,27 +656,27 @@ const editLokasiKegiatan = async (req, res) => {
     }
 };
 
-// Edit/Update daftar SKPD untuk kombinasi kegiatan-lokasi
+// Edit/Update daftar Satker untuk kombinasi kegiatan-lokasi
 const editSkpdKegiatanLokasi = async (req, res) => {
     try {
         const { id_kegiatan, lokasi_id } = req.params;
-        const { kdskpd_list } = req.body;
+        const { kdsatker_list } = req.body; // Ubah dari kdskpd_list ke kdsatker_list
         
         // Validasi input
-        if (!kdskpd_list || !Array.isArray(kdskpd_list)) {
+        if (!kdsatker_list || !Array.isArray(kdsatker_list)) {
             return res.status(400).json({
                 success: false,
-                error: 'kdskpd_list (array) harus diisi'
+                error: 'kdsatker_list (array) harus diisi'
             });
         }
         
         const kegiatanId = parseInt(id_kegiatan);
         const lokasiId = parseInt(lokasi_id);
         
-        console.log('Edit SKPD - Input values:', {
+        console.log('Edit Satker - Input values:', {
             id_kegiatan: kegiatanId,
             lokasi_id: lokasiId,
-            kdskpd_list
+            kdsatker_list
         });
         
         // Cek apakah jadwal kegiatan ada
@@ -667,45 +697,45 @@ const editSkpdKegiatanLokasi = async (req, res) => {
             });
         }
         
-        // Ambil SKPD yang sudah ada untuk kombinasi ini
-        const currentSkpd = await JadwalKegiatanLokasiSkpd.findAll({
+        // Ambil Satker yang sudah ada untuk kombinasi ini
+        const currentSatker = await JadwalKegiatanLokasiSkpd.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
         });
         
-        const currentSkpdList = currentSkpd.map(s => s.kdskpd);
-        console.log('Current SKPD:', currentSkpdList);
-        console.log('New SKPD:', kdskpd_list);
+        const currentSatkerList = currentSatker.map(s => s.kdskpd);
+        console.log('Current Satker:', currentSatkerList);
+        console.log('New Satker:', kdsatker_list);
         
-        // Hapus semua SKPD yang sudah ada
+        // Hapus semua Satker yang sudah ada
         const deletedCount = await JadwalKegiatanLokasiSkpd.destroy({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
         });
         
         console.log('Deleted relations count:', deletedCount);
         
-        // Tambahkan SKPD baru
+        // Tambahkan Satker baru
         const newRelations = [];
-        const failedSkpd = [];
+        const failedSatker = [];
         
-        for (const kdskpd of kdskpd_list) {
+        for (const kdsatker of kdsatker_list) {
             try {
-                console.log(`Creating relation for SKPD: ${kdskpd}`);
+                console.log(`Creating relation for Satker: ${kdsatker}`);
                 const relasi = await JadwalKegiatanLokasiSkpd.create({
                     id_kegiatan: kegiatanId,
                     lokasi_id: lokasiId,
-                    kdskpd
+                    kdskpd: kdsatker // Field kdskpd tetap sama, tapi sekarang berisi kode satker
                 });
                 newRelations.push(relasi);
-                console.log(`SKPD ${kdskpd} berhasil ditambahkan dengan ID: ${relasi.id}`);
+                console.log(`Satker ${kdsatker} berhasil ditambahkan dengan ID: ${relasi.id}`);
             } catch (error) {
-                console.log(`SKPD ${kdskpd} error:`, error.message);
-                failedSkpd.push(kdskpd);
+                console.log(`Satker ${kdsatker} error:`, error.message);
+                failedSatker.push(kdsatker);
             }
         }
         
         res.status(200).json({
             success: true,
-            message: 'Daftar SKPD berhasil diupdate',
+            message: 'Daftar Satker berhasil diupdate',
             data: {
                 id_kegiatan: kegiatanId,
                 lokasi_id: lokasiId,
@@ -715,20 +745,20 @@ const editSkpdKegiatanLokasi = async (req, res) => {
                     lat: lokasi.lat,
                     lng: lokasi.lng
                 },
-                previous_skpd: currentSkpdList,
-                new_skpd: newRelations.map(r => r.kdskpd),
-                failed_skpd: failedSkpd.length > 0 ? failedSkpd : undefined,
+                previous_satker: currentSatkerList,
+                new_satker: newRelations.map(r => r.kdskpd),
+                failed_satker: failedSatker.length > 0 ? failedSatker : undefined,
                 summary: {
-                    previous_count: currentSkpdList.length,
+                    previous_count: currentSatkerList.length,
                     deleted_count: deletedCount,
                     new_count: newRelations.length,
-                    failed_count: failedSkpd.length,
-                    total_requested: kdskpd_list.length
+                    failed_count: failedSatker.length,
+                    total_requested: kdsatker_list.length
                 }
             }
         });
     } catch (error) {
-        console.error('Edit SKPD Kegiatan Lokasi Error:', error);
+        console.error('Edit Satker Kegiatan Lokasi Error:', error);
         res.status(500).json({
             success: false,
             error: 'Internal server error',

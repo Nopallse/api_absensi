@@ -2,78 +2,7 @@ const { ViewDaftarUnitKerja, SatkerTbl, BidangTbl, BidangSub } = require("../mod
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 
-/**
- * Mendapatkan semua data view_daftar_unit_kerja dengan search, filter, dan pagination
- * @param {Object} req - Request object
- * @param {Object} res - Response object
- */
-const getAllViewDaftarUnitKerja = async (req, res) => {
-  try {
-    // Ambil parameter pagination, search, dan filter dari query
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-    const { search, jenis } = req.query;
 
-    // Build kondisi where
-    let whereCondition = {
-      status: '1' // Selalu filter status = 1
-    };
-
-    // Tambahkan search jika ada
-    if (search) {
-      whereCondition[Op.or] = [
-        { id_unit_kerja: { [Op.like]: `%${search}%` } },
-        { kd_unit_kerja: { [Op.like]: `%${search}%` } },
-        { nm_unit_kerja: { [Op.like]: `%${search}%` } }
-      ];
-    }
-
-    // Sementara nonaktifkan filter jenis karena masalah collation
-    // if (jenis) {
-    //   whereCondition.jenis = jenis;
-    // }
-
-    // Hitung total data
-    const totalItems = await ViewDaftarUnitKerja.count({
-      where: whereCondition
-    });
-
-    // Ambil data dengan pagination
-    const data = await ViewDaftarUnitKerja.findAll({
-      where: whereCondition,
-      limit: limit,
-      offset: offset,
-      order: [['nm_unit_kerja', 'ASC']],
-      include: getIncludeByJenis(jenis)
-    });
-
-    // Enrich data dengan relasi berdasarkan jenis
-    const enrichedData = await enrichDataWithRelations(data);
-
-    const totalPages = Math.ceil(totalItems / limit);
-
-    // Build filter response
-    let filterResponse = {};
-    if (jenis) filterResponse.jenis = jenis;
-
-    res.json({
-      data: enrichedData,
-      pagination: {
-        totalItems: totalItems,
-        totalPages: totalPages,
-        currentPage: page,
-        itemsPerPage: limit
-      },
-      filter: Object.keys(filterResponse).length > 0 ? filterResponse : null,
-      searchQuery: search || null
-    });
-
-  } catch (error) {
-    console.error('GetAllViewDaftarUnitKerja Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
 /**
  * Mendapatkan data view_daftar_unit_kerja berdasarkan ID
@@ -84,22 +13,141 @@ const getViewDaftarUnitKerjaById = async (req, res) => {
   try {
     const { kd_unit_kerja } = req.params;
 
+    // Cari data berdasarkan kd_unit_kerja
     const data = await ViewDaftarUnitKerja.findOne({
       where: {
         kd_unit_kerja: kd_unit_kerja,
         status: '1'
-      },
-      include: getIncludeByJenis()
+      }
     });
 
     if (!data) {
       return res.status(404).json({ error: "Data unit kerja tidak ditemukan" });
     }
 
-    // Enrich data dengan relasi
-    const enrichedData = await enrichDataWithRelations([data]);
+    // Enrich data berdasarkan jenis unit kerja
+    let enrichedData;
+    
+    if (data.jenis === 'satker_tbl') {
+      // Ambil data dari satker_tbl
+      const satkerData = await ViewDaftarUnitKerja.sequelize.query(
+        `SELECT KDSATKER, NMSATKER, NAMA_JABATAN, JENIS_JABATAN, KDSKPD FROM satker_tbl WHERE KDSATKER = '${data.kd_unit_kerja}' AND STATUS_SATKER = '1'`,
+        { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (satkerData.length > 0) {
+        enrichedData = {
+          ...data.toJSON(),
+          relasi_data: {
+            kd_satker: satkerData[0].KDSATKER,
+            nm_satker: satkerData[0].NMSATKER,
+            nama_jabatan: satkerData[0].NAMA_JABATAN,
+            jenis_jabatan: satkerData[0].JENIS_JABATAN,
+            kdskpd: satkerData[0].KDSKPD
+          }
+        };
+      } else {
+        enrichedData = data.toJSON();
+      }
+    } else if (data.jenis === 'bidang_tbl') {
+      // Ambil data dari bidang_tbl
+      const bidangData = await ViewDaftarUnitKerja.sequelize.query(
+        `SELECT BIDANGF, NMBIDANG FROM bidang_tbl WHERE BIDANGF = '${data.kd_unit_kerja}' AND STATUS_BIDANG = '1'`,
+        { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (bidangData.length > 0) {
+        enrichedData = {
+          ...data.toJSON(),
+          relasi_data: {
+            bidangf: bidangData[0].BIDANGF,
+            nm_bidang: bidangData[0].NMBIDANG
+          }
+        };
+      } else {
+        enrichedData = data.toJSON();
+      }
+    } else if (data.jenis === 'bidang_sub') {
+      // Ambil data dari bidang_sub
+      const subBidangData = await ViewDaftarUnitKerja.sequelize.query(
+        `SELECT SUBF, NMSUB, BIDANGF FROM bidang_sub WHERE SUBF = '${data.kd_unit_kerja}' AND STATUS_SUB = '1'`,
+        { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
+      );
+      
+      if (subBidangData.length > 0) {
+        enrichedData = {
+          ...data.toJSON(),
+          relasi_data: {
+            subf: subBidangData[0].SUBF,
+            nm_sub: subBidangData[0].NMSUB,
+            bidangf: subBidangData[0].BIDANGF
+          }
+        };
+      } else {
+        enrichedData = data.toJSON();
+      }
+    } else {
+      enrichedData = data.toJSON();
+    }
 
-    res.json(enrichedData[0]);
+    // Ambil data pegawai di unit kerja ini
+    const pegawaiData = await ViewDaftarUnitKerja.sequelize.query(
+      `SELECT 
+        mp.NAMA,
+        mp.NIP,
+        mp.KDSKPD,
+        mp.KDSATKER,
+        mp.BIDANGF,
+        mp.KDPANGKAT,
+        mp.JENIS_JABATAN,
+        mp.KDJENKEL,
+        mp.TEMPATLHR,
+        mp.TGLLHR,
+        mp.AGAMA,
+        mp.ALAMAT,
+        mp.NOTELP,
+        mp.NOKTP,
+        mp.FOTO,
+        mp.JENIS_PEGAWAI,
+        mp.STATUSAKTIF,
+        mp.NM_UNIT_KERJA,
+        mp.KODE_UNIT_KERJA
+      FROM mstpegawai mp
+      WHERE mp.KODE_UNIT_KERJA = '${data.kd_unit_kerja}' 
+        AND mp.STATUSAKTIF = 'AKTIF'
+      ORDER BY mp.NAMA ASC`,
+      { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
+    );
+
+    // Tambahkan data pegawai ke response
+    enrichedData.pegawai = pegawaiData.map((pegawai, index) => ({
+      id: index + 1, // Generate ID berdasarkan index
+      username: pegawai.NIP, // Gunakan NIP sebagai username
+      email: null, // Tidak ada email di mstpegawai
+      level: null, // Tidak ada level di mstpegawai
+      status: '10', // Default status
+      nama: pegawai.NAMA,
+      nip: pegawai.NIP,
+      kdskpd: pegawai.KDSKPD,
+      kdsatker: pegawai.KDSATKER,
+      bidangf: pegawai.BIDANGF,
+      kdpangkat: pegawai.KDPANGKAT,
+      jenis_jabatan: pegawai.JENIS_JABATAN,
+      kdjenkel: pegawai.KDJENKEL,
+      tempatlhr: pegawai.TEMPATLHR,
+      tgllhr: pegawai.TGLLHR,
+      agama: pegawai.AGAMA,
+      alamat: pegawai.ALAMAT,
+      notelp: pegawai.NOTELP,
+      noktp: pegawai.NOKTP,
+      foto: pegawai.FOTO,
+      jenis_pegawai: pegawai.JENIS_PEGAWAI,
+      status_aktif: pegawai.STATUSAKTIF, // Field yang benar
+      nm_unit_kerja: pegawai.NM_UNIT_KERJA,
+      kd_unit_kerja: pegawai.KODE_UNIT_KERJA // Field yang benar
+    }));
+
+    res.json(enrichedData);
 
   } catch (error) {
     console.error('GetViewDaftarUnitKerjaById Error:', error);
@@ -107,172 +155,7 @@ const getViewDaftarUnitKerjaById = async (req, res) => {
   }
 };
 
-/**
- * Mendapatkan include berdasarkan jenis
- * @param {String} jenis - Jenis relasi yang diinginkan
- * @returns {Array} Array include untuk Sequelize
- */
-const getIncludeByJenis = (jenis = null) => {
-  const includes = [];
 
-  // Jika tidak ada jenis yang dipilih, include semua kemungkinan relasi
-  if (!jenis) {
-    includes.push(
-      {
-        model: SatkerTbl,
-        as: 'satker',
-        required: false,
-        where: { STATUS_SATKER: '1' },
-        attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-      },
-      {
-        model: BidangTbl,
-        as: 'bidang',
-        required: false,
-        where: { STATUS_BIDANG: '1' },
-        attributes: ['BIDANGF', 'NMBIDANG', 'NAMA_JABATAN', 'JENIS_JABATAN']
-      },
-      {
-        model: BidangSub,
-        as: 'bidangSub',
-        required: false,
-        where: { STATUS_SUB: '1' },
-        attributes: ['SUBF', 'NMSUB', 'NAMA_JABATAN', 'BIDANGF']
-      }
-    );
-  } else {
-    // Include berdasarkan jenis yang dipilih
-    switch (jenis) {
-      case 'satker_tbl':
-        includes.push({
-          model: SatkerTbl,
-          as: 'satker',
-          required: true,
-          where: { STATUS_SATKER: '1' },
-          attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        break;
-      case 'bidang_tbl':
-        includes.push({
-          model: BidangTbl,
-          as: 'bidang',
-          required: true,
-          where: { STATUS_BIDANG: '1' },
-          attributes: ['BIDANGF', 'NMBIDANG', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        // Tambahkan include satker untuk mendapatkan data satker induk
-        includes.push({
-          model: SatkerTbl,
-          as: 'satkerInduk',
-          required: false,
-          where: { STATUS_SATKER: '1' },
-          attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        break;
-      case 'bidang_sub':
-        includes.push({
-          model: BidangSub,
-          as: 'bidangSub',
-          required: true,
-          where: { STATUS_SUB: '1' },
-          attributes: ['SUBF', 'NMSUB', 'NAMA_JABATAN', 'BIDANGF']
-        });
-        // Tambahkan include satker untuk mendapatkan data satker induk
-        includes.push({
-          model: SatkerTbl,
-          as: 'satkerInduk',
-          required: false,
-          where: { STATUS_SATKER: '1' },
-          attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        // Tambahkan include bidang untuk mendapatkan data bidang induk
-        includes.push({
-          model: BidangTbl,
-          as: 'bidang',
-          required: false,
-          where: { STATUS_BIDANG: '1' },
-          attributes: ['BIDANGF', 'NMBIDANG', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        break;
-    }
-  }
-
-  return includes;
-};
-
-/**
- * Enrich data dengan relasi berdasarkan jenis
- * @param {Array} data - Array data dari ViewDaftarUnitKerja
- * @returns {Array} Array data yang sudah di-enrich
- */
-const enrichDataWithRelations = async (data) => {
-  const enrichedData = [];
-
-  for (const item of data) {
-    const itemData = item.toJSON();
-    
-    // Tambahkan data relasi berdasarkan jenis
-    switch (itemData.jenis) {
-      case 'satker_tbl':
-        if (itemData.satker) {
-          itemData.relasi_data = {
-            kd_satker: itemData.satker.KDSATKER,
-            nm_satker: itemData.satker.NMSATKER,
-            nama_jabatan: itemData.satker.NAMA_JABATAN,
-            jenis_jabatan: itemData.satker.JENIS_JABATAN
-          };
-        }
-        break;
-      case 'bidang_tbl':
-        if (itemData.bidang) {
-          itemData.relasi_data = {
-            bidangf: itemData.bidang.BIDANGF,
-            nm_bidang: itemData.bidang.NMBIDANG,
-            nama_jabatan: itemData.bidang.NAMA_JABATAN,
-            jenis_jabatan: itemData.bidang.JENIS_JABATAN
-          };
-          
-          // Tambahkan data satker jika ada
-          if (itemData.satkerInduk) {
-            itemData.relasi_data.kd_satker = itemData.satkerInduk.KDSATKER;
-            itemData.relasi_data.nm_satker = itemData.satkerInduk.NMSATKER;
-          }
-        }
-        break;
-      case 'bidang_sub':
-        if (itemData.bidangSub) {
-          itemData.relasi_data = {
-            subf: itemData.bidangSub.SUBF,
-            nm_sub: itemData.bidangSub.NMSUB,
-            nama_jabatan: itemData.bidangSub.NAMA_JABATAN,
-            bidangf: itemData.bidangSub.BIDANGF
-          };
-          
-          // Tambahkan data satker jika ada
-          if (itemData.satkerInduk) {
-            itemData.relasi_data.kd_satker = itemData.satkerInduk.KDSATKER;
-            itemData.relasi_data.nm_satker = itemData.satkerInduk.NMSATKER;
-          }
-          
-          // Tambahkan data bidang induk jika ada
-          if (itemData.bidang) {
-            itemData.relasi_data.nm_bidang = itemData.bidang.NMBIDANG;
-          }
-        }
-        break;
-    }
-
-    // Hapus data relasi yang tidak perlu dari response
-    delete itemData.satker;
-    delete itemData.bidang;
-    delete itemData.bidangSub;
-    delete itemData.satkerInduk;
-
-    enrichedData.push(itemData);
-  }
-
-  return enrichedData;
-};
 
 /**
  * Mendapatkan data Level 1 (Satuan Kerja) dengan pagination dan search - Versi Tanpa View
@@ -395,19 +278,29 @@ const getLevel2DataNoView = async (req, res) => {
     // Apply pagination setelah filter
     const data = filteredData.slice(offset, offset + limit);
 
-    // Transform data ke format yang diharapkan frontend
-    const enrichedData = [];
-    for (const item of data) {
-      // Ambil data satker induk menggunakan raw query
+    // Ambil semua kd_unit_atasan yang unik untuk batch query
+    const uniqueSatkerCodes = [...new Set(data.map(item => item.kd_unit_atasan))];
+    
+    // Batch query untuk semua satker sekaligus
+    let satkerMap = {};
+    if (uniqueSatkerCodes.length > 0) {
+      const satkerCodesStr = uniqueSatkerCodes.map(code => `'${code}'`).join(',');
       const satkerData = await ViewDaftarUnitKerja.sequelize.query(
-        `SELECT KDSATKER, NMSATKER FROM satker_tbl WHERE KDSATKER = '${item.kd_unit_atasan}' AND STATUS_SATKER = '1'`,
+        `SELECT KDSATKER, NMSATKER FROM satker_tbl WHERE KDSATKER IN (${satkerCodesStr}) AND STATUS_SATKER = '1'`,
         { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
       );
       
-      let satkerInfo = null;
-      if (satkerData && satkerData.length > 0) {
-        satkerInfo = satkerData[0];
-      }
+      // Buat map untuk lookup cepat
+      satkerMap = satkerData.reduce((map, satker) => {
+        map[satker.KDSATKER] = satker;
+        return map;
+      }, {});
+    }
+
+    // Transform data ke format yang diharapkan frontend
+    const enrichedData = [];
+    for (const item of data) {
+      const satkerInfo = satkerMap[item.kd_unit_atasan] || null;
 
       // Hitung jumlah sub bidang
       const subBidangCount = allData.filter(subItem => 
@@ -543,31 +436,50 @@ const getLevel3DataNoView = async (req, res) => {
     // Apply pagination setelah filter
     const data = filteredData.slice(offset, offset + limit);
 
-    // Transform data ke format yang diharapkan frontend
-    const enrichedData = [];
-    for (const item of data) {
-      // Ambil data bidang induk menggunakan raw query
+    // Ambil semua kd_unit_atasan yang unik untuk batch query bidang
+    const uniqueBidangCodes = [...new Set(data.map(item => item.kd_unit_atasan))];
+    
+    // Batch query untuk semua bidang sekaligus
+    let bidangMap = {};
+    let satkerCodes = [];
+    if (uniqueBidangCodes.length > 0) {
+      const bidangCodesStr = uniqueBidangCodes.map(code => `'${code}'`).join(',');
       const bidangData = await ViewDaftarUnitKerja.sequelize.query(
-        `SELECT BIDANGF, NMBIDANG, NAMA_JABATAN, JENIS_JABATAN, KDSATKER FROM bidang_tbl WHERE BIDANGF = '${item.kd_unit_atasan}' AND STATUS_BIDANG = '1'`,
+        `SELECT BIDANGF, NMBIDANG, NAMA_JABATAN, JENIS_JABATAN, KDSATKER FROM bidang_tbl WHERE BIDANGF IN (${bidangCodesStr}) AND STATUS_BIDANG = '1'`,
         { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
       );
       
-      let bidangInfo = null;
-      let satkerInfo = null;
-      
-      if (bidangData && bidangData.length > 0) {
-        bidangInfo = bidangData[0];
-        
-        // Ambil data satker induk menggunakan raw query
-        const satkerData = await ViewDaftarUnitKerja.sequelize.query(
-          `SELECT KDSATKER, NMSATKER, NAMA_JABATAN, JENIS_JABATAN FROM satker_tbl WHERE KDSATKER = '${bidangInfo.KDSATKER}' AND STATUS_SATKER = '1'`,
-          { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
-        );
-        
-        if (satkerData && satkerData.length > 0) {
-          satkerInfo = satkerData[0];
+      // Buat map untuk lookup cepat dan kumpulkan kode satker
+      bidangMap = bidangData.reduce((map, bidang) => {
+        map[bidang.BIDANGF] = bidang;
+        if (bidang.KDSATKER && !satkerCodes.includes(bidang.KDSATKER)) {
+          satkerCodes.push(bidang.KDSATKER);
         }
-      }
+        return map;
+      }, {});
+    }
+    
+    // Batch query untuk semua satker sekaligus
+    let satkerMap = {};
+    if (satkerCodes.length > 0) {
+      const satkerCodesStr = satkerCodes.map(code => `'${code}'`).join(',');
+      const satkerData = await ViewDaftarUnitKerja.sequelize.query(
+        `SELECT KDSATKER, NMSATKER, NAMA_JABATAN, JENIS_JABATAN FROM satker_tbl WHERE KDSATKER IN (${satkerCodesStr}) AND STATUS_SATKER = '1'`,
+        { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
+      );
+      
+      // Buat map untuk lookup cepat
+      satkerMap = satkerData.reduce((map, satker) => {
+        map[satker.KDSATKER] = satker;
+        return map;
+      }, {});
+    }
+
+    // Transform data ke format yang diharapkan frontend
+    const enrichedData = [];
+    for (const item of data) {
+      const bidangInfo = bidangMap[item.kd_unit_atasan] || null;
+      const satkerInfo = bidangInfo ? satkerMap[bidangInfo.KDSATKER] || null : null;
       
       enrichedData.push({
         id_unit_kerja: item.id_unit_kerja, // Menggunakan id_unit_kerja dari view
@@ -608,323 +520,8 @@ const getLevel3DataNoView = async (req, res) => {
   }
 };
 
-/**
- * Mendapatkan data Level 2 (Bidang) dengan pagination dan search
- * @param {Object} req - Request object
- * @param {Object} res - Response object
- */
-const getLevel2Data = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-    const { search, satker } = req.query;
 
-    // Build kondisi where untuk level 2
-    let whereCondition = {
-      status: '1',
-      jenis: 'bidang_tbl'
-    };
 
-    // Tambahkan search jika ada
-    if (search) {
-      whereCondition[Op.or] = [
-        { id_unit_kerja: { [Op.like]: `%${search}%` } },
-        { kd_unit_kerja: { [Op.like]: `%${search}%` } },
-        { nm_unit_kerja: { [Op.like]: `%${search}%` } }
-      ];
-    }
-
-    // Hitung total data menggunakan raw query untuk menghindari masalah collation
-    const countResult = await ViewDaftarUnitKerja.sequelize.query(
-      `SELECT COUNT(*) as count FROM view_daftar_unit_kerja WHERE status = '1' AND jenis = 'satker_tbl'`,
-      { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
-    );
-    const totalItems = countResult[0].count;
-
-    // Ambil data dengan pagination menggunakan raw query untuk menghindari masalah collation
-    const data = await ViewDaftarUnitKerja.findAll({
-      where: whereCondition,
-      limit: limit,
-      offset: offset,
-      order: [['nm_unit_kerja', 'ASC']]
-    });
-
-    // Enrich data dengan relasi menggunakan raw query
-    const enrichedData = [];
-    for (const item of data) {
-      const itemData = item.toJSON();
-      
-      // Ambil data bidang menggunakan raw query
-      const bidangData = await BidangTbl.findOne({
-        where: { 
-          BIDANGF: itemData.kd_unit_kerja,
-          STATUS_BIDANG: '1'
-        },
-        attributes: ['BIDANGF', 'NMBIDANG', 'NAMA_JABATAN', 'JENIS_JABATAN']
-      });
-      
-      if (bidangData) {
-        itemData.relasi_data = {
-          bidangf: bidangData.BIDANGF,
-          nm_bidang: bidangData.NMBIDANG,
-          nama_jabatan: bidangData.NAMA_JABATAN,
-          jenis_jabatan: bidangData.JENIS_JABATAN
-        };
-        
-        // Ambil data satker induk menggunakan raw query
-        const satkerData = await SatkerTbl.findOne({
-          where: { 
-            KDSATKER: itemData.kd_unit_atasan,
-            STATUS_SATKER: '1'
-          },
-          attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        
-        if (satkerData) {
-          itemData.relasi_data.kd_satker = satkerData.KDSATKER;
-          itemData.relasi_data.nm_satker = satkerData.NMSATKER;
-        }
-      }
-      
-      enrichedData.push(itemData);
-    }
-
-    // Filter berdasarkan satker jika ada
-    let filteredData = enrichedData;
-    if (satker) {
-      filteredData = enrichedData.filter(item => 
-        item.relasi_data && item.relasi_data.kd_satker === satker
-      );
-    }
-
-    const totalPages = Math.ceil(totalItems / limit);
-
-    res.json({
-      data: filteredData,
-      pagination: {
-        totalItems: filteredData.length,
-        totalPages: Math.ceil(filteredData.length / limit),
-        currentPage: page,
-        itemsPerPage: limit
-      },
-      searchQuery: search || null,
-      filter: satker ? { satker } : null
-    });
-
-  } catch (error) {
-    console.error('GetLevel2Data Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-/**
- * Mendapatkan data Level 3 (Sub Bidang) dengan pagination dan search
- * @param {Object} req - Request object
- * @param {Object} res - Response object
- */
-const getLevel3Data = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-    const { search, satker, bidang } = req.query;
-
-    // Build kondisi where untuk level 3
-    let whereCondition = {
-      status: '1',
-      jenis: 'bidang_sub'
-    };
-
-    // Tambahkan search jika ada
-    if (search) {
-      whereCondition[Op.or] = [
-        { id_unit_kerja: { [Op.like]: `%${search}%` } },
-        { kd_unit_kerja: { [Op.like]: `%${search}%` } },
-        { nm_unit_kerja: { [Op.like]: `%${search}%` } }
-      ];
-    }
-
-    // Hitung total data menggunakan raw query untuk menghindari masalah collation
-    const countResult = await ViewDaftarUnitKerja.sequelize.query(
-      `SELECT COUNT(*) as count FROM view_daftar_unit_kerja WHERE status = '1' AND jenis = 'satker_tbl'`,
-      { type: ViewDaftarUnitKerja.sequelize.QueryTypes.SELECT }
-    );
-    const totalItems = countResult[0].count;
-
-    // Ambil data dengan pagination menggunakan raw query untuk menghindari masalah collation
-    const data = await ViewDaftarUnitKerja.findAll({
-      where: whereCondition,
-      limit: limit,
-      offset: offset,
-      order: [['nm_unit_kerja', 'ASC']]
-    });
-
-    // Enrich data dengan relasi menggunakan raw query
-    const enrichedData = [];
-    for (const item of data) {
-      const itemData = item.toJSON();
-      
-      // Ambil data bidang sub menggunakan raw query
-      const bidangSubData = await BidangSub.findOne({
-        where: { 
-          SUBF: itemData.kd_unit_kerja,
-          STATUS_SUB: '1'
-        },
-        attributes: ['SUBF', 'NMSUB', 'NAMA_JABATAN', 'BIDANGF']
-      });
-      
-      if (bidangSubData) {
-        itemData.relasi_data = {
-          subf: bidangSubData.SUBF,
-          nm_sub: bidangSubData.NMSUB,
-          nama_jabatan: bidangSubData.NAMA_JABATAN,
-          bidangf: bidangSubData.BIDANGF
-        };
-        
-        // Ambil data satker induk menggunakan raw query
-        const satkerData = await SatkerTbl.findOne({
-          where: { 
-            KDSATKER: itemData.kd_unit_atasan,
-            STATUS_SATKER: '1'
-          },
-          attributes: ['KDSATKER', 'NMSATKER', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        
-        if (satkerData) {
-          itemData.relasi_data.kd_satker = satkerData.KDSATKER;
-          itemData.relasi_data.nm_satker = satkerData.NMSATKER;
-        }
-        
-        // Ambil data bidang induk menggunakan raw query
-        const bidangData = await BidangTbl.findOne({
-          where: { 
-            BIDANGF: bidangSubData.BIDANGF,
-            STATUS_BIDANG: '1'
-          },
-          attributes: ['BIDANGF', 'NMBIDANG', 'NAMA_JABATAN', 'JENIS_JABATAN']
-        });
-        
-        if (bidangData) {
-          itemData.relasi_data.nm_bidang = bidangData.NMBIDANG;
-        }
-      }
-      
-      enrichedData.push(itemData);
-    }
-
-    // Filter berdasarkan satker dan bidang jika ada
-    let filteredData = enrichedData;
-    if (satker) {
-      filteredData = filteredData.filter(item => 
-        item.relasi_data && item.relasi_data.kd_satker === satker
-      );
-    }
-    if (bidang) {
-      filteredData = filteredData.filter(item => 
-        item.relasi_data && item.relasi_data.bidangf === bidang
-      );
-    }
-
-    const totalPages = Math.ceil(totalItems / limit);
-
-    res.json({
-      data: filteredData,
-      pagination: {
-        totalItems: filteredData.length,
-        totalPages: Math.ceil(filteredData.length / limit),
-        currentPage: page,
-        itemsPerPage: limit
-      },
-      searchQuery: search || null,
-      filter: { satker, bidang }
-    });
-
-  } catch (error) {
-    console.error('GetLevel3Data Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-const getViewDaftarUnitKerjaStats = async (req, res) => {
-  try {
-    const stats = await ViewDaftarUnitKerja.findAll({
-      where: { status: '1' },
-      attributes: [
-        'jenis',
-        [Sequelize.fn('COUNT', Sequelize.col('jenis')), 'count']
-      ],
-      group: ['jenis'],
-      raw: true
-    });
-
-    const totalCount = await ViewDaftarUnitKerja.count({
-      where: { status: '1' }
-    });
-
-    res.json({
-      total: totalCount,
-      by_jenis: stats
-    });
-
-  } catch (error) {
-    console.error('GetViewDaftarUnitKerjaStats Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
-/**
- * Mendapatkan filter options untuk dropdown (hanya kode dan nama)
- * @param {Object} req - Request object
- * @param {Object} res - Response object
- */
-const getFilterOptions = async (req, res) => {
-  try {
-    const { jenis, search, limit = 50 } = req.query;
-    
-    if (!jenis) {
-      return res.status(400).json({ error: 'Parameter jenis diperlukan' });
-    }
-
-    // Build kondisi where
-    let whereCondition = {
-      status: '1'
-      // Sementara nonaktifkan filter jenis karena masalah collation
-      // jenis: jenis
-    };
-
-    // Tambahkan search jika ada
-    if (search) {
-      whereCondition[Op.or] = [
-        { kd_unit_kerja: { [Op.like]: `%${search}%` } },
-        { nm_unit_kerja: { [Op.like]: `%${search}%` } }
-      ];
-    }
-
-    // Ambil semua data untuk filter di backend
-    const allData = await ViewDaftarUnitKerja.findAll({
-      where: whereCondition,
-      attributes: ['kd_unit_kerja', 'nm_unit_kerja', 'jenis'], // Tambahkan jenis untuk filter
-      order: [['nm_unit_kerja', 'ASC']]
-    });
-
-    // Filter data berdasarkan jenis di backend
-    const filteredData = allData.filter(item => item.jenis === jenis);
-    
-    // Apply limit setelah filter
-    const data = filteredData.slice(0, parseInt(limit));
-
-    res.json({
-      data: data,
-      total: data.length,
-      jenis: jenis,
-      searchQuery: search || null
-    });
-
-  } catch (error) {
-    console.error('GetFilterOptions Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-};
 
 const getFilterOptionsHierarchy = async (req, res) => {
   try {
@@ -1013,12 +610,9 @@ const getFilterOptionsHierarchy = async (req, res) => {
 };
 
 module.exports = {
-  getAllViewDaftarUnitKerja,
   getLevel1DataNoView,
   getLevel2DataNoView,
   getLevel3DataNoView,
   getViewDaftarUnitKerjaById,
-  getViewDaftarUnitKerjaStats,
-  getFilterOptions,
   getFilterOptionsHierarchy
 };

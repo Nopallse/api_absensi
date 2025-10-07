@@ -33,9 +33,6 @@ fs
 const mstPegawaiModel = require('./mstpegawai.js')(masterSequelize, Sequelize.DataTypes);
 db[mstPegawaiModel.name] = mstPegawaiModel;
 
-const skpdTblModel = require('./skpd_tbl.js')(masterSequelize, Sequelize.DataTypes);
-db[skpdTblModel.name] = skpdTblModel;
-
 const satkerTblModel = require('./satker_tbl.js')(masterSequelize, Sequelize.DataTypes);
 db[satkerTblModel.name] = satkerTblModel;
 

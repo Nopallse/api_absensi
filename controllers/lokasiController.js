@@ -1,418 +1,287 @@
-const { Lokasi, MstPegawai, SkpdTbl, SatkerTbl, BidangTbl } = require("../models");
-const { getLokasiByUserData } = require("../utils/locationUtils");
+const { Lokasi, ViewDaftarUnitKerja } = require('../models');
+const { 
+  getEffectiveLocation, 
+  createOrUpdateLocation, 
+  deleteLocation, 
+  getLocationHierarchy 
+} = require('../utils/lokasiInheritanceUtils');
 
-const Sequelize = require("sequelize");
-const { Op } = Sequelize;
-
-// Helper function untuk mendapatkan data organisasi lengkap
-const getOrganizationData = async (lokasi) => {
-  const result = { ...lokasi.toJSON() };
-  
+/**
+ * Mendapatkan semua lokasi dengan pagination
+ */
+const getAllLokasi = async (req, res) => {
   try {
-    // Ambil data SKPD jika ada
-    if (lokasi.id_skpd) {
-      const skpdData = await SkpdTbl.findByPk(lokasi.id_skpd);
-      result.skpd_data = skpdData ? skpdData.toJSON() : null;
-    }
-
-    // Ambil data Satker jika ada
-    if (lokasi.id_satker) {
-      const satkerData = await SatkerTbl.findByPk(lokasi.id_satker);
-      result.satker_data = satkerData ? satkerData.toJSON() : null;
-    }
-
-    // Ambil data Bidang jika ada
-    if (lokasi.id_bidang) {
-      const bidangData = await BidangTbl.findByPk(lokasi.id_bidang);
-      result.bidang_data = bidangData ? bidangData.toJSON() : null;
-    }
-  } catch (error) {
-    console.error('Error getting organization data:', error);
-    // Jika ada error, tetap return data lokasi tanpa data organisasi
-  }
-
-  return result;
-};
-
-// Mendapatkan lokasi user berdasarkan SKPD/Satker/Bidang
-const getMyLocation = async (req, res) => {
-  try {
-    const userNip = req.user.username;
-    
-    // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await MstPegawai.findOne({
-      where: { NIP: userNip }
-    });
-
-    if (!pegawai) {
-      return res.status(404).json({ 
-        message: "Data pegawai tidak ditemukan" 
-      });
-    }
-
-    // Buat userData object dari data pegawai
-    const userData = {
-      kdskpd: pegawai.KDSKPD,
-      kdsatker: pegawai.KDSATKER,
-      bidangf: pegawai.BIDANGF
-    };
-
-    // Gunakan utility function untuk mendapatkan lokasi berdasarkan user data
-    const lokasiResult = await getLokasiByUserData(userData);
-
-    if (!lokasiResult) {
-      return res.status(404).json({ 
-        message: "Data lokasi tidak ditemukan untuk pegawai ini" 
-      });
-    }
-
-    // Tambahkan data organisasi untuk setiap lokasi
-    const lokasiWithOrgData = await Promise.all(
-      lokasiResult.data.map(async (loc) => await getOrganizationData(loc))
-    );
-
-    return res.status(200).json({
-      data: lokasiWithOrgData,
-      lokasi_level: lokasiResult.level,
-      lokasi_count: lokasiResult.count,
-      pegawai_info: {
-        nip: pegawai.NIP,
-        nama: pegawai.NAMA,
-        kdskpd: pegawai.KDSKPD,
-        kdsatker: pegawai.KDSATKER,
-        kdbidang: pegawai.KDBIDANG
-      }
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ 
-      message: "Terjadi kesalahan server" 
-    });
-  }
-};
-
-
-
-const getLokasi = async (req, res) => {
-  try {
-  const { search, id_skpd, id_satker, id_bidang, status } = req.query;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
+    const { search, level, kd_unit_kerja } = req.query;
 
-    // Build where condition
-    let whereCondition = {};
-    
-    // Filter berdasarkan organizational ID
-    // Support untuk filter null values dengan string "null"
-    if (id_skpd !== undefined) {
-      whereCondition.id_skpd = id_skpd === 'null' ? null : id_skpd;
-    }
-    
-    if (id_satker !== undefined) {
-      whereCondition.id_satker = id_satker === 'null' ? null : id_satker;
-    }
-    
-    if (id_bidang !== undefined) {
-      whereCondition.id_bidang = id_bidang === 'null' ? null : id_bidang;
+    let whereCondition = { status: true };
+
+    // Filter berdasarkan level
+    if (level) {
+      whereCondition.level_unit_kerja = level;
     }
 
-    // Filter status lokasi (1 = aktif, 0 = nonaktif)
-    if (status !== undefined) {
-      if (status === '1' || status === 1) {
-        whereCondition.status = true;
-      } else if (status === '0' || status === 0) {
-        whereCondition.status = false;
-      }
-    }
-    
-    // Jika ada parameter search, tambahkan kondisi pencarian
-    if (search) {
-      const searchCondition = {
-        [Op.or]: [
-          {
-            ket: {
-              [Op.like]: `%${search}%`
-            }
-          },
-          {
-            id_skpd: {
-              [Op.like]: `%${search}%`
-            }
-          },
-          {
-            id_satker: {
-              [Op.like]: `%${search}%`
-            }
-          },
-          {
-            id_bidang: {
-              [Op.like]: `%${search}%`
-            }
-          }
-        ]
+    // Filter berdasarkan kode unit kerja
+    if (kd_unit_kerja) {
+      whereCondition.kd_unit_kerja = {
+        [require('sequelize').Op.like]: `${kd_unit_kerja}%`
       };
-      
-      // Gabungkan filter organisasi dengan search condition
-      if (Object.keys(whereCondition).length > 0) {
-        whereCondition = {
-          [Op.and]: [
-            whereCondition,
-            searchCondition
-          ]
-        };
-      } else {
-        whereCondition = searchCondition;
-      }
     }
 
-    // Ambil data lokasi dengan atau tanpa filter pencarian
-    const lokasis = await Lokasi.findAll({
+    // Search
+    if (search) {
+      whereCondition[require('sequelize').Op.or] = [
+        { nama_lokasi: { [require('sequelize').Op.like]: `%${search}%` } },
+        { alamat: { [require('sequelize').Op.like]: `%${search}%` } },
+        { ket: { [require('sequelize').Op.like]: `%${search}%` } }
+      ];
+    }
+
+    const { count, rows: lokasi } = await Lokasi.findAndCountAll({
       where: whereCondition,
-      offset,
+      include: [
+        {
+          model: ViewDaftarUnitKerja,
+          as: 'unitKerja',
+          attributes: ['nm_unit_kerja', 'jenis']
+        }
+      ],
+      order: [
+        ['level_unit_kerja', 'ASC'],
+        ['is_inherited', 'ASC'],
+        ['kd_unit_kerja', 'ASC']
+      ],
       limit,
-      order: [['lokasi_id', 'DESC']]
+      offset
     });
 
-    // Tambahkan data organisasi untuk setiap lokasi
-    const lokasisWithOrgData = await Promise.all(
-      lokasis.map(async (loc) => await getOrganizationData(loc))
-    );
+    const totalPages = Math.ceil(count / limit);
 
-    // Hitung total data
-    const totalItems = await Lokasi.count({
-      where: whereCondition
-    });
-    const totalPages = Math.ceil(totalItems / limit);
-
-    const pagination = {
-      totalItems,
-      totalPages,
-      currentPage: page,
-      itemsPerPage: limit,
-    };
-
-    // Build response message
-    let message = "Data lokasi berhasil diambil";
-    const filters = [];
-    
-    if (id_skpd !== undefined) {
-      filters.push(`SKPD: ${id_skpd === 'null' ? 'NULL' : id_skpd}`);
-    }
-    if (id_satker !== undefined) {
-      filters.push(`Satker: ${id_satker === 'null' ? 'NULL' : id_satker}`);
-    }
-    if (id_bidang !== undefined) {
-      filters.push(`Bidang: ${id_bidang === 'null' ? 'NULL' : id_bidang}`);
-    }
-    if (status !== undefined) {
-      const statusText = status === '1' || status === 1 ? 'Aktif' : 'Tidak Aktif';
-      filters.push(`Status: ${statusText}`);
-    }
-    if (search) filters.push(`Search: "${search}"`);
-    
-    if (filters.length > 0) {
-      message = `Ditemukan ${lokasisWithOrgData.length} lokasi dengan filter [${filters.join(', ')}]`;
-    }
-
-    return res.status(200).json({
-      message,
-      data: lokasisWithOrgData,
-      pagination,
-      filters: {
-        id_skpd: id_skpd !== undefined ? (id_skpd === 'null' ? null : id_skpd) : undefined,
-        id_satker: id_satker !== undefined ? (id_satker === 'null' ? null : id_satker) : undefined,
-        id_bidang: id_bidang !== undefined ? (id_bidang === 'null' ? null : id_bidang) : undefined,
-        status: status !== undefined ? (status === '1' || status === 1 ? true : false) : undefined,
-        search: search || null
+    res.json({
+      data: lokasi,
+      pagination: {
+        totalItems: count,
+        totalPages,
+        currentPage: page,
+        itemsPerPage: limit
       }
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
+    console.error('GetAllLokasi Error:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
+/**
+ * Mendapatkan lokasi berdasarkan ID
+ */
 const getLokasiById = async (req, res) => {
   try {
-    const { lokasi_id } = req.params;
+    const { id } = req.params;
 
-    const lokasi = await Lokasi.findOne({ where: { lokasi_id } });
+    const lokasi = await Lokasi.findOne({
+      where: { lokasi_id: id, status: true },
+      include: [
+        {
+          model: ViewDaftarUnitKerja,
+          as: 'unitKerja',
+          attributes: ['nm_unit_kerja', 'jenis']
+        }
+      ]
+    });
 
     if (!lokasi) {
-      return res.status(404).json({ message: "Lokasi tidak ditemukan" });
+      return res.status(404).json({ error: "Lokasi tidak ditemukan" });
     }
 
-    // Tambahkan data organisasi
-    const lokasiWithOrgData = await getOrganizationData(lokasi);
-
-    return res.status(200).json({ data: lokasiWithOrgData });
+    res.json(lokasi);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
+    console.error('GetLokasiById Error:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
+/**
+ * Mendapatkan lokasi efektif untuk unit kerja
+ */
+const getEffectiveLocationController = async (req, res) => {
+  try {
+    console.log('req.params', req.params);
+    const { kd_unit_kerja } = req.params;
+    console.log('kd_unit_kerja', kd_unit_kerja);
+    const lokasi = await getEffectiveLocation(kd_unit_kerja);
+
+    if (!lokasi) {
+      return res.status(404).json({ error: "Lokasi tidak ditemukan untuk unit kerja ini" });
+    }
+
+    res.json(lokasi);
+  } catch (error) {
+    console.error('GetEffectiveLocation Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Mendapatkan hierarki lokasi untuk unit kerja
+ */
+const getLocationHierarchyController = async (req, res) => {
+  try {
+    const { kd_unit_kerja } = req.params;
+
+    const locations = await getLocationHierarchy(kd_unit_kerja);
+
+    res.json({
+      data: locations,
+      total: locations.length
+    });
+  } catch (error) {
+    console.error('GetLocationHierarchy Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Membuat lokasi baru
+ */
 const createLokasi = async (req, res) => {
   try {
-    const { lat, lng, range, id_skpd, id_satker, id_bidang, ket, status } = req.body;
-    console.log(req.body);
-    if (!lat || !lng || !range) {
-      return res.status(400).json({ message: "Latitude, longitude, dan range harus diisi" });
-    }
+    const lokasiData = req.body;
+    const createdBy = req.user?.username || 'system';
 
-    // id_skpd wajib diisi, id_satker dan id_bidang boleh null
-    if (!id_skpd) {
-      return res.status(400).json({ message: "Field OPD (id_skpd) wajib diisi dan tidak boleh null." });
-    }
+    const lokasi = await createOrUpdateLocation(lokasiData, createdBy);
 
-    // Cek apakah sudah ada lokasi untuk kombinasi unit kerja yang sama
-    const existingLokasi = await Lokasi.findOne({
-      where: {
-        id_skpd: id_skpd,
-        id_satker: id_satker || null,
-        id_bidang: id_bidang || null
-      }
-    });
-
-    if (existingLokasi) {
-      return res.status(409).json({
-        message: "Lokasi untuk kombinasi OPD, UPT, Bidang tersebut sudah ada."
-      });
-    }
-
-    const newLokasi = await Lokasi.create({
-      lat,
-      lng,
-      range,
-      id_skpd,
-      id_satker: id_satker || null,
-      id_bidang: id_bidang || null,
-      ket: ket || null,
-      status: status !== undefined ? status : true,
-    });
-
-    // Tambahkan data organisasi
-    const lokasiWithOrgData = await getOrganizationData(newLokasi);
-
-    return res.status(201).json({
+    res.status(201).json({
       message: "Lokasi berhasil dibuat",
-      data: lokasiWithOrgData,
+      data: lokasi
     });
   } catch (error) {
-    // Tangani error duplikat secara spesifik
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({
-        message: "Lokasi untuk unit kerja (OPD, UPT, Bidang) sudah ada."
-      });
-    }
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
+    console.error('CreateLokasi Error:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
+/**
+ * Mengupdate lokasi
+ */
 const updateLokasi = async (req, res) => {
   try {
-    const { lokasi_id } = req.params;
-    
-    console.log('Update lokasi request:', {
-      lokasi_id,
-      body: req.body
+    const { id } = req.params;
+    const lokasiData = req.body;
+    const updatedBy = req.user?.username || 'system';
+
+    // Cek apakah lokasi ada
+    const existingLokasi = await Lokasi.findOne({
+      where: { lokasi_id: id, status: true }
     });
 
-    const lokasi = await Lokasi.findOne({ where: { lokasi_id } });
-
-    if (!lokasi) {
-      return res.status(404).json({ message: "Lokasi tidak ditemukan" });
+    if (!existingLokasi) {
+      return res.status(404).json({ error: "Lokasi tidak ditemukan" });
     }
 
-    // Hanya update field yang ada di request body (PATCH behavior)
-    const updateData = {};
-    
-    if (req.body.lat !== undefined) updateData.lat = req.body.lat;
-    if (req.body.lng !== undefined) updateData.lng = req.body.lng;
-    if (req.body.range !== undefined) updateData.range = req.body.range;
-    if (req.body.ket !== undefined) updateData.ket = req.body.ket;
-    if (req.body.status !== undefined) updateData.status = req.body.status;
-    
-    // Handle organizational fields - allow id_satker and id_bidang to be null, id_skpd required
-    if (req.body.hasOwnProperty('id_skpd')) updateData.id_skpd = req.body.id_skpd;
-    if (req.body.hasOwnProperty('id_satker')) updateData.id_satker = req.body.id_satker;
-    if (req.body.hasOwnProperty('id_bidang')) updateData.id_bidang = req.body.id_bidang;
+    // Update data
+    const updatedData = {
+      ...lokasiData,
+      updated_by: updatedBy
+    };
 
-    // Validasi: jika ada perubahan organisasi, id_skpd wajib diisi
-    const orgFields = ['id_skpd', 'id_satker', 'id_bidang'];
-    const orgUpdate = orgFields.some(f => updateData.hasOwnProperty(f));
-    if (orgUpdate) {
-      if (!updateData.id_skpd) {
-        return res.status(400).json({ message: "Field OPD (id_skpd) wajib diisi dan tidak boleh null saat update." });
-      }
-      // Cek duplikat kombinasi
-      const duplicateLokasi = await Lokasi.findOne({
-        where: {
-          id_skpd: updateData.id_skpd,
-          id_satker: updateData.id_satker || null,
-          id_bidang: updateData.id_bidang || null,
-          lokasi_id: { [Op.ne]: lokasi_id }
-        }
-      });
-      if (duplicateLokasi) {
-        return res.status(409).json({
-          message: "Lokasi untuk kombinasi OPD, UPT, Bidang tersebut sudah ada."
-        });
-      }
+    await existingLokasi.update(updatedData);
+
+    // Update child locations jika diperlukan
+    if (lokasiData.lat && lokasiData.lng) {
+      await updateChildLocations(existingLokasi.kd_unit_kerja, existingLokasi);
     }
 
-    console.log('Fields to update:', updateData);
-
-    await lokasi.update(updateData);
-
-    // Refresh data setelah update
-    await lokasi.reload();
-    
-    // Tambahkan data organisasi untuk response
-    const lokasiWithOrgData = await getOrganizationData(lokasi);
-
-    return res.status(200).json({ 
+    res.json({
       message: "Lokasi berhasil diupdate",
-      data: lokasiWithOrgData
+      data: existingLokasi
     });
   } catch (error) {
-    // Tangani error duplikat secara spesifik
-    if (error.name === 'SequelizeUniqueConstraintError') {
-      return res.status(409).json({
-        message: "Lokasi untuk unit kerja (OPD, UPT, Bidang) sudah ada."
-      });
-    }
     console.error('UpdateLokasi Error:', error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
+    res.status(500).json({ error: error.message });
   }
 };
 
+/**
+ * Menghapus lokasi
+ */
 const deleteLokasi = async (req, res) => {
   try {
-    const { lokasi_id } = req.params;
+    const { id } = req.params;
+    const deletedBy = req.user?.username || 'system';
 
-    const lokasi = await Lokasi.findOne({ where: { lokasi_id } });
+    // Cek apakah lokasi ada
+    const existingLokasi = await Lokasi.findOne({
+      where: { lokasi_id: id, status: true }
+    });
 
-    if (!lokasi) {
-      return res.status(404).json({ message: "Lokasi tidak ditemukan" });
+    if (!existingLokasi) {
+      return res.status(404).json({ error: "Lokasi tidak ditemukan" });
     }
 
-    await lokasi.destroy();
+    await deleteLocation(existingLokasi.kd_unit_kerja, deletedBy);
 
-    return res.status(200).json({ message: "Lokasi berhasil dihapus" });
+    res.json({
+      message: "Lokasi berhasil dihapus"
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Terjadi kesalahan server" });
+    console.error('DeleteLokasi Error:', error);
+    res.status(500).json({ error: error.message });
   }
 };
 
-module.exports = { 
-  getMyLocation,
-  createLokasi, 
-  getLokasi, 
-  getLokasiById, 
-  updateLokasi, 
-  deleteLokasi
+/**
+ * Mendapatkan lokasi berdasarkan level unit kerja
+ */
+const getLokasiByLevel = async (req, res) => {
+  try {
+    const { level } = req.params;
+    const { kd_unit_kerja } = req.query;
+
+    let whereCondition = { 
+      level_unit_kerja: parseInt(level),
+      status: true 
+    };
+
+    // Filter berdasarkan kode unit kerja parent
+    if (kd_unit_kerja) {
+      whereCondition.kd_unit_kerja = {
+        [require('sequelize').Op.like]: `${kd_unit_kerja}%`
+      };
+    }
+
+    const lokasi = await Lokasi.findAll({
+      where: whereCondition,
+      include: [
+        {
+          model: ViewDaftarUnitKerja,
+          as: 'unitKerja',
+          attributes: ['nm_unit_kerja', 'jenis']
+        }
+      ],
+      order: [['kd_unit_kerja', 'ASC']]
+    });
+
+    res.json({
+      data: lokasi,
+      total: lokasi.length,
+      level: parseInt(level)
+    });
+  } catch (error) {
+    console.error('GetLokasiByLevel Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = {
+  getAllLokasi,
+  getLokasiById,
+  getEffectiveLocationController,
+  getLocationHierarchyController,
+  createLokasi,
+  updateLokasi,
+  deleteLokasi,
+  getLokasiByLevel
 };

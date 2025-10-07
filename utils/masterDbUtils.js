@@ -69,13 +69,6 @@ const getPegawaiByNip = async (nip) => {
   try {
     const pegawai = await MstPegawai.findOne({
       where: { NIP: nip },
-      include: [
-        {
-          model: SkpdTbl,
-          attributes: ['KDSKPD', 'NMSKPD', 'StatusSKPD'],
-          required: false
-        }
-      ],
       attributes: [
         'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 

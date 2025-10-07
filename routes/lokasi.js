@@ -1,25 +1,41 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const { requireAuth, requireAdminOpd, requireSuperAdmin } = require("../middlewares/authMiddleware");
 const {
-  getMyLocation,
-  createLokasi,
-  getLokasi,
+  getAllLokasi,
   getLokasiById,
+  getEffectiveLocationController,
+  getLocationHierarchyController,
+  createLokasi,
   updateLokasi,
-  deleteLokasi
-} = require("../controllers/lokasiController");
+  deleteLokasi,
+  getLokasiByLevel
+} = require('../controllers/lokasiController');
 
-// Routes untuk user biasa
-router.get("/my-location", requireAuth(), getMyLocation);
-router.get("/:lokasi_id", requireAuth(), getLokasiById);
 
-// Routes untuk admin (OPD dan Super Admin)
-router.get("/", requireAdminOpd(), getLokasi);
-router.post("/", requireAdminOpd(), createLokasi);
-router.put("/:lokasi_id", requireAdminOpd(), updateLokasi);
 
-// Routes khusus Super Admin
-router.delete("/:lokasi_id", requireSuperAdmin(), deleteLokasi);
+
+// GET /api/lokasi - Mendapatkan semua lokasi dengan pagination
+router.get('/', getAllLokasi);
+
+// GET /api/lokasi/level/:level - Mendapatkan lokasi berdasarkan level
+router.get('/level/:level', getLokasiByLevel);
+
+// GET /api/lokasi/effective/:kd_unit_kerja - Mendapatkan lokasi efektif untuk unit kerja
+router.get('/effective/:kd_unit_kerja', getEffectiveLocationController);
+
+// GET /api/lokasi/hierarchy/:kd_unit_kerja - Mendapatkan hierarki lokasi untuk unit kerja
+router.get('/hierarchy/:kd_unit_kerja', getLocationHierarchyController);
+
+// GET /api/lokasi/:id - Mendapatkan lokasi berdasarkan ID
+router.get('/:id', getLokasiById);
+
+// POST /api/lokasi - Membuat lokasi baru
+router.post('/', createLokasi);
+
+// PUT /api/lokasi/:id - Mengupdate lokasi
+router.put('/:id', updateLokasi);
+
+// DELETE /api/lokasi/:id - Menghapus lokasi
+router.delete('/:id', deleteLokasi);
 
 module.exports = router;

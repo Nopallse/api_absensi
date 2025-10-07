@@ -4,11 +4,11 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class SatkerTbl extends Model {
     static associate(models) {
-      // Relasi dengan SKPD (Many to One)
-      SatkerTbl.belongsTo(models.SkpdTbl, {
-        foreignKey: 'KDSKPD',
-        targetKey: 'KDSKPD'
-      });
+      // Relasi dengan SKPD (Many to One) - DIHAPUS karena SkpdTbl sudah tidak digunakan
+      // SatkerTbl.belongsTo(models.SkpdTbl, {
+      //   foreignKey: 'KDSKPD',
+      //   targetKey: 'KDSKPD'
+      // });
 
       // Relasi dengan Bidang (One to Many)
       SatkerTbl.hasMany(models.BidangTbl, {

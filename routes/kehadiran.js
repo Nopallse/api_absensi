@@ -1,5 +1,5 @@
 const express = require("express");
-const { getKehadiranByUserId, getAllKehadiran, getAttendanceHistory, getMonthlyReport, getKehadiranToday, createKehadiran, checkTodayAttendance, getUserAccessibleLocations } = require("../controllers/kehadiranController");
+const { getKehadiranByUserId, getAllKehadiran, getAttendanceHistory, getMonthlyReport, getKehadiranToday, createKehadiran, checkTodayAttendance, getUserAccessibleLocations, createKehadiranKegiatan, getKehadiranKegiatan } = require("../controllers/kehadiranController");
 const router = express.Router();
 const { requireAuth, requireAdminOpd } = require("../middlewares/authMiddleware");
 const { getLokasi } = require("../controllers/lokasiController");
@@ -8,6 +8,8 @@ const upload = multer({ dest: 'uploads/' });
 
 // Routes untuk semua user yang terautentikasi
 router.post("/", requireAuth(), upload.single('photo'), createKehadiran);
+router.post("/kegiatan", requireAuth(), upload.single('photo'), createKehadiranKegiatan);
+router.get("/kegiatan", requireAuth(), getKehadiranKegiatan);
 router.get("/report", requireAuth(), getMonthlyReport);
 router.get("/lokasi", requireAuth(), getUserAccessibleLocations);
 router.get("/debug/today", requireAuth(), checkTodayAttendance);

@@ -4,11 +4,11 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class MstPegawai extends Model {
     static associate(models) {
-      // Relasi dengan skpd_tbl
-      MstPegawai.belongsTo(models.SkpdTbl, {
-        foreignKey: 'KDSKPD',
-        targetKey: 'KDSKPD'
-      });
+      // Relasi dengan skpd_tbl - DIHAPUS karena SkpdTbl sudah tidak digunakan
+      // MstPegawai.belongsTo(models.SkpdTbl, {
+      //   foreignKey: 'KDSKPD',
+      //   targetKey: 'KDSKPD'
+      // });
 
       // Relasi dengan view_daftar_unit_kerja berdasarkan NM_UNIT_KERJA
       MstPegawai.belongsTo(models.ViewDaftarUnitKerja, {

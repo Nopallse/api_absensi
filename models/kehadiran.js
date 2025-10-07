@@ -15,6 +15,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'lokasi_id',
         targetKey: 'lokasi_id'
       });
+
+      // Relasi dengan kegiatan (opsional)
+      Kehadiran.belongsTo(models.MasterJadwalKegiatan, { 
+        foreignKey: 'id_kegiatan',
+        targetKey: 'id_kegiatan',
+        as: 'kegiatan'
+      });
     }
   }
 
@@ -76,6 +83,21 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         validate: {
           isIn: [['HAS', 'CP']]
+        }
+      },
+      jenis_kehadiran: {
+        type: DataTypes.ENUM('BIASA', 'KEGIATAN'),
+        allowNull: false,
+        defaultValue: 'BIASA',
+        comment: 'Jenis kehadiran: BIASA untuk kehadiran harian, KEGIATAN untuk kehadiran kegiatan'
+      },
+      id_kegiatan: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'ID kegiatan jika jenis_kehadiran = KEGIATAN',
+        references: {
+          model: 'master_jadwal_kegiatan',
+          key: 'id_kegiatan'
         }
       },
     },

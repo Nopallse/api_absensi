@@ -10,11 +10,11 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: 'id'
       });
 
-      // Relasi dengan SKPD
-      AdmOpd.belongsTo(models.SkpdTbl, {
-        foreignKey: 'id_skpd',
-        targetKey: 'KDSKPD'
-      });
+      // Relasi dengan SKPD - DIHAPUS karena SkpdTbl sudah tidak digunakan
+      // AdmOpd.belongsTo(models.SkpdTbl, {
+      //   foreignKey: 'id_skpd',
+      //   targetKey: 'KDSKPD'
+      // });
 
       // Relasi dengan Satker
       AdmOpd.belongsTo(models.SatkerTbl, {

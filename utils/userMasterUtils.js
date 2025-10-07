@@ -37,13 +37,14 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         }
       ],
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'NM_UNIT_KERJA',
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'KODE_UNIT_KERJA','NM_UNIT_KERJA',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
       ]
     });
 
+    
     console.log('Master data found:', masterData.length);
     console.log('Sample master data:', masterData[0]?.toJSON());
 
@@ -102,6 +103,8 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         email: pegawai.EMAIL,
         foto: pegawai.FOTO,
         jenis_pegawai: pegawai.JENIS_PEGAWAI,
+        kd_unit_kerja: pegawai.KODE_UNIT_KERJA,
+        nm_unit_kerja: pegawai.NM_UNIT_KERJA,
         status_aktif: pegawai.STATUSAKTIF,
         
         // Data relasi
@@ -113,14 +116,6 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         
         satker: satkerMap.get(pegawai.KDSATKER) || null,
         bidang: bidangMap.get(pegawai.BIDANGF) || null,
-        
-        // Data unit kerja dari relasi ViewDaftarUnitKerja
-        unitKerja: pegawai.unitKerja ? {
-          kd_unit_kerja: pegawai.unitKerja.kd_unit_kerja,
-          nm_unit_kerja: pegawai.unitKerja.nm_unit_kerja,
-          jenis: pegawai.unitKerja.jenis,
-          status: pegawai.unitKerja.status
-        } : null
       });
     });
 
@@ -142,6 +137,8 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           kdskpd: masterData.kdskpd,
           kdsatker: masterData.kdsatker,
           bidangf: masterData.bidangf,
+          kd_unit_kerja: masterData.kd_unit_kerja,
+          nm_unit_kerja: masterData.nm_unit_kerja,
           kdpangkat: masterData.kdpangkat,
           jenis_jabatan: masterData.jenis_jabatan,
           kdjenkel: masterData.kdjenkel,
@@ -157,7 +154,6 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           status_aktif: masterData.status_aktif,
           
           // Data relasi
-          skpd: masterData.skpd,
           satker: masterData.satker,
           bidang: masterData.bidang,
           unitKerja: masterData.unitKerja
@@ -171,6 +167,7 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           kdskpd: null,
           kdsatker: null,
           bidangf: null,
+          nm_unit_kerja: null,
           kdpangkat: null,
           jenis_jabatan: null,
           kdjenkel: null,

@@ -7,6 +7,8 @@ const usersRoutes = require("./routes/user");
 const adminRoutes = require("./routes/admin");
 const adminOpdRoutes = require("./routes/adminOpd");
 const lokasiRoutes = require("./routes/lokasi");
+const lokasiKegiatanRoutes = require("./routes/lokasiKegiatan");
+const unitKerjaRoutes = require("./routes/unitKerja");
 const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
 const jadwalKegiatanLokasiSkpdRoutes = require("./routes/jadwalKegiatanLokasiSkpd");
 const viewDaftarUnitKerjaRoutes = require("./routes/viewDaftarUnitKerja");
@@ -39,12 +41,11 @@ const syncDatabases = async () => {
     console.log('Database utama berhasil disinkronkan');
     
     // Sync database master - hanya model yang perlu dibuat
-    const { MstPegawai, SkpdTbl, SatkerTbl, BidangTbl } = require('./models');
+    const { MstPegawai, SatkerTbl, BidangTbl } = require('./models');
     
     // Sync hanya model yang benar-benar perlu dibuat tabel baru
     // Model yang sudah ada seperti ViewDaftarUnitKerja dan BidangSub tidak perlu di-sync
     await MstPegawai.sync({ force: false });
-    await SkpdTbl.sync({ force: false });
     await SatkerTbl.sync({ force: false });
     await BidangTbl.sync({ force: false });
     
@@ -61,6 +62,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/kehadiran", kehadiranRoutes);
 app.use("/api/user", usersRoutes);
 app.use("/api/lokasi", lokasiRoutes);
+app.use("/api/lokasi-kegiatan", lokasiKegiatanRoutes);
+app.use("/api/unit-kerja", unitKerjaRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
 app.use("/api/view-daftar-unit-kerja", viewDaftarUnitKerjaRoutes);
