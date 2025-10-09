@@ -85,21 +85,6 @@ module.exports = (sequelize, DataTypes) => {
           isIn: [['HAS', 'CP']]
         }
       },
-      jenis_kehadiran: {
-        type: DataTypes.ENUM('BIASA', 'KEGIATAN'),
-        allowNull: false,
-        defaultValue: 'BIASA',
-        comment: 'Jenis kehadiran: BIASA untuk kehadiran harian, KEGIATAN untuk kehadiran kegiatan'
-      },
-      id_kegiatan: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        comment: 'ID kegiatan jika jenis_kehadiran = KEGIATAN',
-        references: {
-          model: 'master_jadwal_kegiatan',
-          key: 'id_kegiatan'
-        }
-      },
     },
     {
       sequelize,

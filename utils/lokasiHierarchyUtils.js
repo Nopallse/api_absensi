@@ -1,66 +1,77 @@
 const { Lokasi, SatkerTbl, BidangTbl, BidangSub } = require('../models');
 
+
 /**
- * Mendapatkan lokasi efektif berdasarkan hierarki
+ * Mendapatkan lokasi efektif berdasarkan hierarki (OPTIMIZED)
  * Prioritas: Sub Bidang > Bidang > Satker
  */
 const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = null) => {
   try {
-    // Jika ada sub bidang, cari lokasi khusus sub bidang
-    if (idSubBidang) {
-      const subBidangLocation = await Lokasi.findOne({
-        where: {
-          id_satker: idSatker,
-          id_bidang: idBidang,
-          id_sub_bidang: idSubBidang,
-          status: true
-        }
-      });
-
-      if (subBidangLocation) {
-        return {
-          ...subBidangLocation.toJSON(),
-          level: 'sub_bidang',
-          source: 'sub_bidang'
-        };
-      }
-    }
-
-    // Jika ada bidang, cari lokasi khusus bidang
-    if (idBidang) {
-      const bidangLocation = await Lokasi.findOne({
-        where: {
-          id_satker: idSatker,
-          id_bidang: idBidang,
-          id_sub_bidang: null,
-          status: true
-        }
-      });
-
-      if (bidangLocation) {
-        return {
-          ...bidangLocation.toJSON(),
-          level: 'bidang',
-          source: 'bidang'
-        };
-      }
-    }
-
-    // Cari lokasi satker (fallback)
-    const satkerLocation = await Lokasi.findOne({
-      where: {
+    // OPTIMIZED: Gunakan satu query dengan OR condition untuk mencari semua kemungkinan lokasi
+    const whereConditions = [
+      {
         id_satker: idSatker,
-        id_bidang: null,
-        id_sub_bidang: null,
         status: true
       }
+    ];
+
+    // Tambahkan kondisi berdasarkan prioritas hierarki
+    if (idSubBidang && idBidang) {
+      whereConditions.push({
+        id_satker: idSatker,
+        id_bidang: idBidang,
+        id_sub_bidang: idSubBidang,
+        status: true
+      });
+    }
+
+    if (idBidang) {
+      whereConditions.push({
+        id_satker: idSatker,
+        id_bidang: idBidang,
+        id_sub_bidang: null,
+        status: true
+      });
+    }
+
+    whereConditions.push({
+      id_satker: idSatker,
+      id_bidang: null,
+      id_sub_bidang: null,
+      status: true
     });
 
-    if (satkerLocation) {
+    // Query dengan OR condition dan order by prioritas
+    const locations = await Lokasi.findAll({
+      where: {
+        [require('sequelize').Op.or]: whereConditions
+      },
+      order: [
+        // Prioritas: sub_bidang > bidang > satker
+        [require('sequelize').literal('CASE WHEN id_sub_bidang IS NOT NULL THEN 1 WHEN id_bidang IS NOT NULL THEN 2 ELSE 3 END'), 'ASC']
+      ],
+      limit: 1
+    });
+
+    if (locations.length > 0) {
+      const location = locations[0];
+      let level, source;
+
+      if (location.id_sub_bidang) {
+        level = 'sub_bidang';
+        source = 'sub_bidang';
+      } else if (location.id_bidang) {
+        level = 'bidang';
+        source = 'bidang';
+      } else {
+        level = 'satker';
+        source = 'satker';
+      }
+
       return {
-        ...satkerLocation.toJSON(),
-        level: 'satker',
-        source: 'satker'
+        ...location.toJSON(),
+        level,
+        source
       };
     }
 

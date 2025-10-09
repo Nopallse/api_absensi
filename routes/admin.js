@@ -43,7 +43,7 @@ const {
   getBidangBySatkerInSkpd,
   getBidangByIdInSatker
 } = require("../controllers/hierarchyController");
-const { getAllJadwalKegiatan, createJadwalKegiatan, getJadwalKegiatanById, updateJadwalKegiatan, deleteJadwalKegiatan, addLokasiToKegiatan, getLokasiKegiatan, removeLokasiFromKegiatan, editLokasiKegiatan, editSkpdKegiatanLokasi } = require("../controllers/jadwalKegiatanController");
+const { getAllJadwalKegiatan, createJadwalKegiatan, getJadwalKegiatanById, updateJadwalKegiatan, deleteJadwalKegiatan, addLokasiToKegiatan, getLokasiKegiatan, removeLokasiFromKegiatan, editLokasiKegiatan, editSkpdKegiatanLokasi,getAllSatkerKegiatan,getDetailSatkerKegiatan } = require("../controllers/jadwalKegiatanController");
 const { addSkpdToKegiatanLokasi, removeSkpdFromKegiatanLokasi } = require("../controllers/jadwalKegiatanLokasiSkpdController");
 const { getAllSettings, updateGlobalTipeJadwal, getCurrentTipeJadwal } = require("../controllers/systemSettingController");
 const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
@@ -320,7 +320,7 @@ router.post('/jadwal-kegiatan/:id_kegiatan/lokasi',
   }),
   addLokasiToKegiatan
 );
-router.post('/jadwal-kegiatan-lokasi-skpd/add', 
+router.post('/jadwal-kegiatan-lokasi-satker/add', 
   requireSuperAdmin(), 
   adminLogMiddleware({ 
     action: 'CREATE', 
@@ -329,7 +329,7 @@ router.post('/jadwal-kegiatan-lokasi-skpd/add',
   }),
   addSkpdToKegiatanLokasi
 );
-router.delete('/jadwal-kegiatan-lokasi-skpd/remove/:id_kegiatan/:lokasi_id/:kdskpd', 
+router.delete('/jadwal-kegiatan-lokasi-satker/remove/:id_kegiatan/:lokasi_id/:kdskpd', 
   requireSuperAdmin(), 
   adminLogMiddleware({ 
     action: 'DELETE', 
@@ -338,7 +338,7 @@ router.delete('/jadwal-kegiatan-lokasi-skpd/remove/:id_kegiatan/:lokasi_id/:kdsk
   }),
   removeSkpdFromKegiatanLokasi
 );
-router.get('/jadwal-kegiatan-lokasi-skpd/:id_kegiatan/lokasi', requireSuperAdmin(), getLokasiKegiatan);
+router.get('/jadwal-kegiatan-lokasi-satker/:id_kegiatan/lokasi', requireSuperAdmin(), getLokasiKegiatan);
 router.delete('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id', 
   requireSuperAdmin(), 
   adminLogMiddleware({ 
@@ -360,15 +360,21 @@ router.put('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id/edit',
   editLokasiKegiatan
 );
 
-router.put('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id/skpd', 
+router.put('/jadwal-kegiatan/:id_kegiatan/lokasi/:lokasi_id/satker', 
   requireSuperAdmin(), 
-  adminLogMiddleware({ 
-    action: 'UPDATE', 
-    resource: 'jadwal_kegiatan_lokasi_skpd',
-    getDescription: (req) => `Edit SKPD list for kegiatan-lokasi ID: ${req.params.id_kegiatan}-${req.params.lokasi_id}`
-  }),
   editSkpdKegiatanLokasi
 );
+
+router.get('/jadwal-kegiatan/:id_kegiatan/satker',
+  requireSuperAdmin(),
+  getAllSatkerKegiatan
+)
+
+router.get('/jadwal-kegiatan/:id_kegiatan/satker/:id_satker',
+  requireSuperAdmin(),
+  getDetailSatkerKegiatan
+)
+
 
 // System Settings Management
 router.get("/system-settings", requireSuperAdmin(), getAllSettings);

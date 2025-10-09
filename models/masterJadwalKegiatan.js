@@ -10,6 +10,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "id_kegiatan",
         otherKey: "lokasi_id"
       });
+      
+      // Relasi dengan kehadiran kegiatan
+      MasterJadwalKegiatan.hasMany(models.KehadiranKegiatan, { 
+        foreignKey: "id_kegiatan",
+        as: 'kehadiran'
+      });
     }
   }
   

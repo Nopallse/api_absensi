@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { requireAuth, requireUserDeviceCheck } = require("../middlewares/authMiddleware");
-const {getAttendanceHistory ,getKehadiranToday,createKehadiran, createKehadiranKegiatan, getKehadiranKegiatan } = require("../controllers/kehadiranController");
-const { getUser,saveFcmToken, resetDeviceId, getMyLocation, getTodayActivitiesEndpoint } = require("../controllers/userController");
+const {getAttendanceHistory ,getKehadiranBiasaToday, getKehadiranKegiatanToday, createKehadiranBiasa, createKehadiranKegiatan, getKehadiranKegiatan } = require("../controllers/kehadiranController");
+const { getUser,saveFcmToken, resetDeviceId, getKehadiranDanLokasi } = require("../controllers/userController");
 const { resetDeviceSelf, registerNewDevice, requestDeviceReset, getMyResetRequests } = require("../controllers/deviceResetController");
 
 // Semua routes memerlukan authentication
@@ -12,15 +12,23 @@ router.use(requireAuth());
 router.use(requireUserDeviceCheck());
 
 router.get("/", getUser);
-router.get("/kehadiran",getAttendanceHistory)
-router.post("/kehadiran", createKehadiran);
-router.get("/kehadiran/today", getKehadiranToday);
+
+// Kehadiran dan Lokasi (GABUNGAN)
+router.get("/kehadiran-lokasi", getKehadiranDanLokasi);
+
+// Kehadiran Biasa (TERPISAH)
+router.get("/kehadiran/biasa", getAttendanceHistory);
+router.get("/kehadiran/biasa/today", getKehadiranBiasaToday);
+router.post("/kehadiran/biasa", createKehadiranBiasa);
+
+// Kehadiran Kegiatan (TERPISAH)
+router.get("/kehadiran/kegiatan/today", getKehadiranKegiatanToday);
+router.get("/kehadiran/kegiatan", getKehadiranKegiatan);
 router.post("/kehadiran/kegiatan", createKehadiranKegiatan);
 
-router.get("/kehadiran/kegiatan", getKehadiranKegiatan);
 
 
-router.get("/lokasi", getMyLocation);
+
 router.post("/fcm-token", saveFcmToken);
 
 // Device reset routes

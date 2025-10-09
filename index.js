@@ -10,7 +10,7 @@ const lokasiRoutes = require("./routes/lokasi");
 const lokasiKegiatanRoutes = require("./routes/lokasiKegiatan");
 const unitKerjaRoutes = require("./routes/unitKerja");
 const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
-const jadwalKegiatanLokasiSkpdRoutes = require("./routes/jadwalKegiatanLokasiSkpd");
+const jadwalKegiatanLokasiSatkerRoutes = require("./routes/jadwalKegiatanLokasiSatker");
 const viewDaftarUnitKerjaRoutes = require("./routes/viewDaftarUnitKerja");
 const docsRoutes = require("./routes/docs");
 const path = require("path");
@@ -65,7 +65,7 @@ app.use("/api/lokasi", lokasiRoutes);
 app.use("/api/lokasi-kegiatan", lokasiKegiatanRoutes);
 app.use("/api/unit-kerja", unitKerjaRoutes);
 app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
-app.use("/api/jadwal-kegiatan-lokasi-skpd", jadwalKegiatanLokasiSkpdRoutes);
+app.use("/api/jadwal-kegiatan-lokasi-satker", jadwalKegiatanLokasiSatkerRoutes);
 app.use("/api/view-daftar-unit-kerja", viewDaftarUnitKerjaRoutes);
 app.use("/api/docs", docsRoutes);
 

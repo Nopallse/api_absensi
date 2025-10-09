@@ -1,4 +1,4 @@
-const { User, Lokasi, MstPegawai, SkpdTbl, AdmOpd, AdmUpt, MasterJadwalKegiatan, JadwalKegiatanLokasiSkpd } = require("../models");
+const { User, Lokasi, MstPegawai, SkpdTbl, AdmOpd, AdmUpt, MasterJadwalKegiatan, JadwalKegiatanLokasiSkpd, Kehadiran, KehadiranKegiatan } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 const { 
@@ -11,11 +11,13 @@ const { getPegawaiByNip } = require("../utils/masterDbUtils");
 const { getLokasiByUserData } = require("../utils/locationUtils");
 const { getEffectiveLocation } = require("../utils/lokasiHierarchyUtils");
 
-// Mendapatkan kegiatan hari ini dengan lokasinya
+
+// Mendapatkan kegiatan hari ini dengan lokasinya (OPTIMIZED)
 const getTodayActivities = async (kdsatker) => {
   try {
     const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-    
+
+    // Query yang dioptimasi dengan filter langsung di database
     const activities = await MasterJadwalKegiatan.findAll({
       where: {
         tanggal_kegiatan: today
@@ -23,46 +25,44 @@ const getTodayActivities = async (kdsatker) => {
       include: [
         {
           model: JadwalKegiatanLokasiSkpd,
+          where: {
+            kdskpd: kdsatker // Filter langsung di database
+          },
+          required: true, // INNER JOIN untuk performa lebih baik
           include: [
             {
               model: Lokasi,
               where: {
                 status: true
               },
-              required: false
+              required: true,
+              attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range'] // Hanya ambil field yang diperlukan
             }
-          ]
+          ],
+          attributes: ['kdskpd'] // Hanya ambil field yang diperlukan
         }
       ],
+      attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'], // Hanya ambil field yang diperlukan
       order: [
         ['jam_mulai', 'ASC']
       ]
     });
 
-    // Filter kegiatan yang memiliki lokasi di satker yang sama
-    const filteredActivities = activities.filter(activity => {
-      return activity.JadwalKegiatanLokasiSkpds.some(jkls => {
-        return jkls.Lokasi && jkls.kdskpd === kdsatker;
-      });
-    });
-
-    return filteredActivities.map(activity => ({
+    return activities.map(activity => ({
       id_kegiatan: activity.id_kegiatan,
       tanggal_kegiatan: activity.tanggal_kegiatan,
       jenis_kegiatan: activity.jenis_kegiatan,
       keterangan: activity.keterangan,
       jam_mulai: activity.jam_mulai,
       jam_selesai: activity.jam_selesai,
-      lokasi_list: activity.JadwalKegiatanLokasiSkpds
-        .filter(jkls => jkls.Lokasi && jkls.kdskpd === kdsatker)
-        .map(jkls => ({
-          lokasi_id: jkls.Lokasi.lokasi_id,
-          ket: jkls.Lokasi.ket,
-          lat: jkls.Lokasi.lat,
-          lng: jkls.Lokasi.lng,
-          range: jkls.Lokasi.range,
-          satker: jkls.kdskpd // Field kdskpd sekarang berisi kode satker
-        }))
+      lokasi_list: activity.JadwalKegiatanLokasiSkpds.map(jkls => ({
+        lokasi_id: jkls.Lokasi.lokasi_id,
+        ket: jkls.Lokasi.ket,
+        lat: jkls.Lokasi.lat,
+        lng: jkls.Lokasi.lng,
+        range: jkls.Lokasi.range,
+        satker: jkls.kdskpd
+      }))
     }));
   } catch (error) {
     console.error('Error getting today activities:', error);
@@ -477,13 +477,35 @@ const resetDeviceId = async (req, res) => {
   }
 };
 
-// Mendapatkan lokasi user berdasarkan hierarki Satker/Bidang/Sub Bidang
-const getMyLocation = async (req, res) => {
+// Mendapatkan kehadiran dan lokasi user (OPTIMIZED)
+const getKehadiranDanLokasi = async (req, res) => {
   try {
     const userNip = req.user.username;
-    console.log(userNip,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-    // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await getPegawaiByNip(userNip);
+
+    // Mendapatkan waktu saat ini dalam WIB
+    const now = new Date();
+    const absenTgl = now.toISOString().split('T')[0];
+
+    // Format tanggal untuk absen_tgl (YYYY-MM-DD)
+    const startOfDay = new Date(absenTgl);
+    const endOfDay = new Date(absenTgl);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // PARALLEL PROCESSING: Jalankan query yang independen secara bersamaan
+    const [kehadiranBiasa, pegawai] = await Promise.all([
+      // Cek kehadiran biasa hari ini
+      Kehadiran.findOne({
+        where: {
+          absen_nip: userNip,
+          absen_tgl: {
+            [Op.between]: [startOfDay, endOfDay]
+          }
+        },
+        attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
+      }),
+      // Dapatkan data pegawai untuk mendapatkan satker
+      getPegawaiByNip(userNip)
+    ]);
 
     if (!pegawai) {
       return res.status(404).json({ 
@@ -491,51 +513,45 @@ const getMyLocation = async (req, res) => {
         message: "Data pegawai tidak ditemukan" 
       });
     }
-    console.log(pegawai.KDSATKER,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
-    console.log(pegawai.BIDANGF,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
-    // Gunakan lokasiHierarchyUtils untuk mendapatkan lokasi efektif
-    const effectiveLocation = await getEffectiveLocation(
-      pegawai.KDSATKER,  // idSatker
-      pegawai.BIDANGF,   // idBidang
-      null               // idSubBidang (tidak ada di data pegawai saat ini)
-    );
-
-    // Dapatkan kegiatan hari ini dengan lokasinya
-    const todayActivities = await getTodayActivities(pegawai.KDSATKER);
-
-    if (!effectiveLocation) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Data lokasi tidak ditemukan untuk pegawai ini",
-        data: {
-          pegawai_info: {
-            nip: pegawai.NIP,
-            nama: pegawai.NAMA,
-            kdsatker: pegawai.KDSATKER,
-            bidangf: pegawai.BIDANGF
-          },
-          today_activities: todayActivities
-        }
-      });
-    }
+    // PARALLEL PROCESSING: Jalankan query lokasi dan kehadiran kegiatan secara bersamaan
+    const [effectiveLocation, kehadiranKegiatan] = await Promise.all([
+      // Dapatkan lokasi efektif
+      getEffectiveLocation(
+        pegawai.KDSATKER,  // idSatker
+        pegawai.BIDANGF,   // idBidang
+        null               // idSubBidang (tidak ada di data pegawai saat ini)
+      ),
+      // Cek kehadiran kegiatan hari ini
+      KehadiranKegiatan.findAll({
+        where: {
+          absen_nip: userNip,
+          absen_tgl: {
+            [Op.between]: [startOfDay, endOfDay]
+          }
+        },
+        include: [
+          {
+            model: MasterJadwalKegiatan,
+            as: 'kegiatan',
+            attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
+          }
+        ],
+        attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'id_kegiatan']
+      })
+    ]);
 
     return res.status(200).json({
       success: true,
-      message: "Lokasi berhasil ditemukan",
+      message: "Data kehadiran dan lokasi berhasil ditemukan",
       data: {
+        kehadiran_biasa: kehadiranBiasa,
         lokasi: effectiveLocation,
-        pegawai_info: {
-          nip: pegawai.NIP,
-          nama: pegawai.NAMA,
-          kdsatker: pegawai.KDSATKER,
-          bidangf: pegawai.BIDANGF
-        },
-        today_activities: todayActivities
+        kehadiran_kegiatan: kehadiranKegiatan
       }
     });
   } catch (error) {
-    console.error('GetMyLocation Error:', error);
+    console.error('GetKehadiranDanLokasi Error:', error);
     return res.status(500).json({ 
       success: false,
       message: "Terjadi kesalahan server",
@@ -544,45 +560,17 @@ const getMyLocation = async (req, res) => {
   }
 };
 
-// Endpoint untuk mendapatkan kegiatan hari ini
-const getTodayActivitiesEndpoint = async (req, res) => {
-  try {
-    const userNip = req.user.username;
-    
-    // Dapatkan data pegawai dari database master berdasarkan NIP
-    const pegawai = await getPegawaiByNip(userNip);
 
-    if (!pegawai) {
-      return res.status(404).json({ 
-        success: false,
-        message: "Data pegawai tidak ditemukan" 
-      });
-    }
 
-    // Dapatkan kegiatan hari ini dengan lokasinya
-    const todayActivities = await getTodayActivities(pegawai.KDSATKER);
 
-    return res.status(200).json({
-      success: true,
-      message: "Kegiatan hari ini berhasil ditemukan",
-      data: {
-        pegawai_info: {
-          nip: pegawai.NIP,
-          nama: pegawai.NAMA,
-          kdsatker: pegawai.KDSATKER,
-          bidangf: pegawai.BIDANGF
-        },
-        today_activities: todayActivities
-      }
-    });
-  } catch (error) {
-    console.error('Get Today Activities Endpoint Error:', error);
-    return res.status(500).json({ 
-      success: false,
-      message: "Terjadi kesalahan server",
-      error: error.message
-    });
-  }
+module.exports = { 
+  getUser, 
+  getAllUser, 
+  getUserById, 
+  updateUser, 
+  updateUserByAdmin, 
+  searchUsersOpd, 
+  saveFcmToken, 
+  resetDeviceId, 
+  getKehadiranDanLokasi
 };
-
-module.exports = { getUser, getAllUser, getUserById, updateUser, updateUserByAdmin, searchUsersOpd, saveFcmToken, resetDeviceId, getMyLocation, getTodayActivitiesEndpoint };

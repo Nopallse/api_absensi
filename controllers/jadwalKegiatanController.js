@@ -90,16 +90,37 @@ const createJadwalKegiatan = async (req, res) => {
             }
         }
         
-        // Cek apakah sudah ada jadwal untuk tanggal tersebut
-        const existingJadwal = await MasterJadwalKegiatan.findOne({
-            where: { tanggal_kegiatan }
-        });
-        
-        if (existingJadwal) {
-            return res.status(400).json({
-                success: false,
-                error: 'Sudah ada jadwal kegiatan untuk tanggal tersebut'
+        // Cek apakah ada konflik waktu jika jam_mulai dan jam_selesai diisi
+        if (jam_mulai && jam_selesai) {
+            const existingJadwal = await MasterJadwalKegiatan.findOne({
+                where: {
+                    tanggal_kegiatan,
+                    [Op.or]: [
+                        // Jam mulai baru berada di antara jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.lte]: jam_mulai },
+                            jam_selesai: { [Op.gt]: jam_mulai }
+                        },
+                        // Jam selesai baru berada di antara jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.lt]: jam_selesai },
+                            jam_selesai: { [Op.gte]: jam_selesai }
+                        },
+                        // Jam baru mencakup jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.gte]: jam_mulai },
+                            jam_selesai: { [Op.lte]: jam_selesai }
+                        }
+                    ]
+                }
             });
+            
+            if (existingJadwal) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Sudah ada jadwal kegiatan yang bentrok dengan waktu tersebut'
+                });
+            }
         }
         
         const newJadwal = await MasterJadwalKegiatan.create({
@@ -152,19 +173,37 @@ const updateJadwalKegiatan = async (req, res) => {
             }
         }
         
-        // Jika tanggal diubah, cek apakah sudah ada jadwal lain untuk tanggal tersebut
-        if (tanggal_kegiatan && tanggal_kegiatan !== jadwal.tanggal_kegiatan) {
+        // Cek apakah ada konflik waktu jika jam_mulai dan jam_selesai diisi
+        if (jam_mulai && jam_selesai) {
+            const targetTanggal = tanggal_kegiatan || jadwal.tanggal_kegiatan;
             const existingJadwal = await MasterJadwalKegiatan.findOne({
-                where: { 
-                    tanggal_kegiatan,
-                    id_kegiatan: { [Op.ne]: id_kegiatan }
+                where: {
+                    tanggal_kegiatan: targetTanggal,
+                    id_kegiatan: { [Op.ne]: id_kegiatan },
+                    [Op.or]: [
+                        // Jam mulai baru berada di antara jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.lte]: jam_mulai },
+                            jam_selesai: { [Op.gt]: jam_mulai }
+                        },
+                        // Jam selesai baru berada di antara jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.lt]: jam_selesai },
+                            jam_selesai: { [Op.gte]: jam_selesai }
+                        },
+                        // Jam baru mencakup jam yang sudah ada
+                        {
+                            jam_mulai: { [Op.gte]: jam_mulai },
+                            jam_selesai: { [Op.lte]: jam_selesai }
+                        }
+                    ]
                 }
             });
             
             if (existingJadwal) {
                 return res.status(400).json({
                     success: false,
-                    error: 'Sudah ada jadwal kegiatan untuk tanggal tersebut'
+                    error: 'Sudah ada jadwal kegiatan yang bentrok dengan waktu tersebut'
                 });
             }
         }
@@ -767,6 +806,48 @@ const editSkpdKegiatanLokasi = async (req, res) => {
     }
 };
 
+
+const getAllSatkerKegiatan = async (req, res) => {
+    try {
+        const { id_kegiatan } = req.params;
+
+        // Cari kegiatan beserta relasi Satker-nya
+        const kegiatan = await MasterJadwalKegiatan.findByPk(id_kegiatan,
+            {
+            include: [
+                {
+                    model: JadwalKegiatanLokasiSkpd,
+                    as: 'satker_relasi',
+                }
+            ]
+        });
+
+        if (!kegiatan) {
+            return res.status(404).json({
+                success: false,
+                message: 'Kegiatan tidak ditemukan'
+            });
+        }
+
+
+        return res.status(200).json({
+            success: true,
+            data: kegiatan
+        });
+    } catch (error) {
+        console.error('getAllSatkerKegiatan error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+const getDetailSatkerKegiatan = async (req,res) => {
+    const {id_kegiatan, id_satker} = req.params
+
+}
+
 module.exports = {
     getJadwalHariIni,
     getAllJadwalKegiatan,
@@ -779,5 +860,7 @@ module.exports = {
     addLokasiToKegiatan,
     removeLokasiFromKegiatan,
     editLokasiKegiatan,
-    editSkpdKegiatanLokasi
+    editSkpdKegiatanLokasi,
+    getAllSatkerKegiatan,
+    getDetailSatkerKegiatan
 }; 
