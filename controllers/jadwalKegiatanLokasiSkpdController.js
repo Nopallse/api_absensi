@@ -1,16 +1,16 @@
-const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSkpd, MstPegawai } = require('../models');
+const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, MstPegawai } = require('../models');
 const { Op } = require('sequelize');
 
 // Menambah SKPD ke lokasi kegiatan
 const addSkpdToKegiatanLokasi = async (req, res) => {
     try {
-        const { id_kegiatan, lokasi_id, kdskpd } = req.body;
+        const { id_kegiatan, lokasi_id, id_satker } = req.body;
         
         // Validasi input
-        if (!id_kegiatan || !lokasi_id || !kdskpd) {
+        if (!id_kegiatan || !lokasi_id || !id_satker) {
             return res.status(400).json({
                 success: false,
-                error: 'ID kegiatan, lokasi_id, dan kdskpd harus diisi'
+                error: 'ID kegiatan, lokasi_id, dan id_satker harus diisi'
             });
         }
         
@@ -32,32 +32,32 @@ const addSkpdToKegiatanLokasi = async (req, res) => {
             });
         }
         
-        // Cek apakah SKPD sudah ada di lokasi ini untuk kegiatan ini
-        const existingRelasi = await JadwalKegiatanLokasiSkpd.findOne({
+        // Cek apakah Satker sudah ada di lokasi ini untuk kegiatan ini
+        const existingRelasi = await JadwalKegiatanLokasiSatker.findOne({
             where: {
                 id_kegiatan,
                 lokasi_id,
-                kdskpd
+                id_satker
             }
         });
         
         if (existingRelasi) {
             return res.status(400).json({
                 success: false,
-                error: 'SKPD sudah terkait dengan lokasi ini untuk kegiatan ini'
+                error: 'Satker sudah terkait dengan lokasi ini untuk kegiatan ini'
             });
         }
         
         // Buat relasi baru
-        const newRelasi = await JadwalKegiatanLokasiSkpd.create({
+        const newRelasi = await JadwalKegiatanLokasiSatker.create({
             id_kegiatan,
             lokasi_id,
-            kdskpd
+            id_satker
         });
         
         res.status(201).json({
             success: true,
-            message: 'SKPD berhasil ditambahkan ke lokasi kegiatan',
+            message: 'Satker berhasil ditambahkan ke lokasi kegiatan',
             data: newRelasi
         });
     } catch (error) {
@@ -70,23 +70,23 @@ const addSkpdToKegiatanLokasi = async (req, res) => {
     }
 };
 
-// Menghapus SKPD dari lokasi kegiatan
+// Menghapus Satker dari lokasi kegiatan
 const removeSkpdFromKegiatanLokasi = async (req, res) => {
     try {
-        const { id_kegiatan, lokasi_id, kdskpd } = req.params;
+        const { id_kegiatan, lokasi_id, id_satker } = req.params;
         
-        const relasi = await JadwalKegiatanLokasiSkpd.findOne({
+        const relasi = await JadwalKegiatanLokasiSatker.findOne({
             where: {
                 id_kegiatan,
                 lokasi_id,
-                kdskpd
+                id_satker
             }
         });
         
         if (!relasi) {
             return res.status(404).json({
                 success: false,
-                error: 'Relasi SKPD dengan lokasi kegiatan tidak ditemukan'
+                error: 'Relasi Satker dengan lokasi kegiatan tidak ditemukan'
             });
         }
         
@@ -94,7 +94,7 @@ const removeSkpdFromKegiatanLokasi = async (req, res) => {
         
         res.status(200).json({
             success: true,
-            message: 'SKPD berhasil dihapus dari lokasi kegiatan'
+            message: 'Satker berhasil dihapus dari lokasi kegiatan'
         });
     } catch (error) {
         console.error('Remove SKPD From Kegiatan Lokasi Error:', error);
@@ -106,12 +106,12 @@ const removeSkpdFromKegiatanLokasi = async (req, res) => {
     }
 };
 
-// Mendapatkan semua SKPD untuk lokasi kegiatan tertentu
+// Mendapatkan semua Satker untuk lokasi kegiatan tertentu
 const getSkpdByKegiatanLokasi = async (req, res) => {
     try {
         const { id_kegiatan, lokasi_id } = req.params;
         
-        const skpdList = await JadwalKegiatanLokasiSkpd.findAll({
+        const satkerList = await JadwalKegiatanLokasiSatker.findAll({
             where: {
                 id_kegiatan,
                 lokasi_id
@@ -130,8 +130,8 @@ const getSkpdByKegiatanLokasi = async (req, res) => {
         
         res.status(200).json({
             success: true,
-            data: skpdList,
-            total_skpd: skpdList.length
+            data: satkerList,
+            total_satker: satkerList.length
         });
     } catch (error) {
         console.error('Get SKPD By Kegiatan Lokasi Error:', error);
@@ -143,18 +143,18 @@ const getSkpdByKegiatanLokasi = async (req, res) => {
     }
 };
 
-// Mendapatkan lokasi kegiatan untuk SKPD tertentu
+// Mendapatkan lokasi kegiatan untuk Satker tertentu
 const getLokasiKegiatanBySkpd = async (req, res) => {
     try {
-        const { kdskpd } = req.params;
+        const { id_satker } = req.params;
         const { tanggal } = req.query;
         
-        const whereClause = { kdskpd };
+        const whereClause = { id_satker };
         if (tanggal) {
             whereClause['$MasterJadwalKegiatan.tanggal_kegiatan$'] = tanggal;
         }
         
-        const lokasiList = await JadwalKegiatanLokasiSkpd.findAll({
+        const lokasiList = await JadwalKegiatanLokasiSatker.findAll({
             where: whereClause,
             include: [
                 {
@@ -187,13 +187,13 @@ const getLokasiKegiatanBySkpd = async (req, res) => {
 };
 
 // Mendapatkan semua relasi jadwal kegiatan lokasi SKPD
-const getAllJadwalKegiatanLokasiSkpd = async (req, res) => {
+const getAllJadwalKegiatanLokasiSatker = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const offset = (page - 1) * limit;
         
-        const { count, rows: relasiList } = await JadwalKegiatanLokasiSkpd.findAndCountAll({
+        const { count, rows: relasiList } = await JadwalKegiatanLokasiSatker.findAndCountAll({
             include: [
                 {
                     model: MasterJadwalKegiatan,
@@ -249,12 +249,12 @@ const getLokasiKegiatanForUser = async (req, res) => {
             });
         }
         
-        const whereClause = { kdskpd: pegawai.KDSKPD };
+        const whereClause = { id_satker: pegawai.KDSATKER };
         if (tanggal) {
             whereClause['$MasterJadwalKegiatan.tanggal_kegiatan$'] = tanggal;
         }
         
-        const lokasiKegiatan = await JadwalKegiatanLokasiSkpd.findOne({
+        const lokasiKegiatan = await JadwalKegiatanLokasiSatker.findOne({
             where: whereClause,
             include: [
                 {
@@ -277,8 +277,8 @@ const getLokasiKegiatanForUser = async (req, res) => {
                 data: [lokasiKegiatan.Lokasi],
                 is_kegiatan: true,
                 jadwal_kegiatan: lokasiKegiatan.MasterJadwalKegiatan,
-                skpd_info: {
-                    kdskpd: pegawai.KDSKPD,
+                satker_info: {
+                    id_satker: pegawai.KDSATKER,
                     nama_pegawai: pegawai.NAMA
                 }
             });
@@ -288,8 +288,8 @@ const getLokasiKegiatanForUser = async (req, res) => {
                 data: [],
                 is_kegiatan: false,
                 jadwal_kegiatan: null,
-                skpd_info: {
-                    kdskpd: pegawai.KDSKPD,
+                satker_info: {
+                    id_satker: pegawai.KDSATKER,
                     nama_pegawai: pegawai.NAMA
                 }
             });
@@ -309,6 +309,6 @@ module.exports = {
     removeSkpdFromKegiatanLokasi,
     getSkpdByKegiatanLokasi,
     getLokasiKegiatanBySkpd,
-    getAllJadwalKegiatanLokasiSkpd,
+    getAllJadwalKegiatanLokasiSatker,
     getLokasiKegiatanForUser
 }; 

@@ -50,25 +50,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: false,
       },
-      auth_key: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      password_reset_token: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
       level: {
         type: DataTypes.STRING,
         allowNull: false,
-      },
-      id_opd: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-      },
-      id_upt: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
       },
       status: {
         type: DataTypes.STRING,

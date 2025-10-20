@@ -43,7 +43,7 @@ const getAllSatker = async (req, res) => {
         return {
           ...satker.toJSON(),
           bidangCount,
-          lokasi
+          lokasi: lokasi // Lokasi langsung di level satker
         };
       })
     );
@@ -125,7 +125,7 @@ const getSatkerDetail = async (req, res) => {
         return {
           ...bidang.toJSON(),
           subBidangCount,
-          lokasi
+          lokasi: lokasi // Lokasi langsung di level bidang
         };
       })
     );
@@ -221,7 +221,7 @@ const getBidangDetail = async (req, res) => {
         
         return {
           ...subBidang.toJSON(),
-          lokasi
+          lokasi: lokasi // Lokasi langsung di level sub-bidang
         };
       })
     );
@@ -409,6 +409,62 @@ const getSatkerLocations = async (req, res) => {
   }
 };
 
+/**
+ * Mengaktifkan lokasi yang non-aktif
+ */
+const activateLocation = async (req, res) => {
+  try {
+    const { idSatker, idBidang, idSubBidang } = req.params;
+
+    // Cari lokasi yang non-aktif berdasarkan level
+    let whereCondition = {
+      id_satker: idSatker,
+      status: false
+    };
+
+    if (idSubBidang) {
+      whereCondition.id_bidang = idBidang;
+      whereCondition.id_sub_bidang = idSubBidang;
+    } else if (idBidang) {
+      whereCondition.id_bidang = idBidang;
+      whereCondition.id_sub_bidang = null;
+    } else {
+      whereCondition.id_bidang = null;
+      whereCondition.id_sub_bidang = null;
+    }
+
+    const { Lokasi } = require('../models');
+    
+    // Cari lokasi yang non-aktif
+    const existingLocation = await Lokasi.findOne({
+      where: whereCondition
+    });
+
+    if (!existingLocation) {
+      return res.status(404).json({ 
+        error: 'Lokasi non-aktif tidak ditemukan' 
+      });
+    }
+
+    // Aktifkan lokasi
+    await existingLocation.update({ 
+      status: true,
+      updatedAt: new Date()
+    });
+
+    // Ambil lokasi yang sudah diaktifkan
+    const activatedLocation = await Lokasi.findByPk(existingLocation.lokasi_id);
+
+    res.json({
+      message: 'Lokasi berhasil diaktifkan',
+      data: activatedLocation
+    });
+  } catch (error) {
+    console.error('ActivateLocation Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getAllSatker,
   getSatkerDetail,
@@ -416,5 +472,6 @@ module.exports = {
   getSubBidangDetail,
   setLocation,
   getLocationHierarchyController,
-  getSatkerLocations
+  getSatkerLocations,
+  activateLocation
 };

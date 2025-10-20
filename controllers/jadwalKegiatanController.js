@@ -1,5 +1,6 @@
-const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSkpd } = require('../models');
-const { Op } = require('sequelize');
+const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, SatkerTbl, MstPegawai, KehadiranKegiatan } = require('../models');
+const { Op, Sequelize } = require('sequelize');
+const ExcelJS = require('exceljs');
 
 // Mendapatkan jadwal kegiatan hari ini
 const getJadwalHariIni = async (req, res) => {
@@ -67,7 +68,7 @@ const getAllJadwalKegiatan = async (req, res) => {
 // Menambah jadwal kegiatan baru
 const createJadwalKegiatan = async (req, res) => {
     try {
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen } = req.body;
         
         // Validasi input
         if (!tanggal_kegiatan || !jenis_kegiatan || !keterangan) {
@@ -128,7 +129,8 @@ const createJadwalKegiatan = async (req, res) => {
             jenis_kegiatan,
             keterangan,
             jam_mulai: jam_mulai || null,
-            jam_selesai: jam_selesai || null
+            jam_selesai: jam_selesai || null,
+            include_absen: include_absen || 'none'
         });
         
         res.status(201).json({
@@ -150,7 +152,7 @@ const createJadwalKegiatan = async (req, res) => {
 const updateJadwalKegiatan = async (req, res) => {
     try {
         const { id_kegiatan } = req.params;
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen } = req.body;
         
         const jadwal = await MasterJadwalKegiatan.findByPk(id_kegiatan);
         if (!jadwal) {
@@ -213,7 +215,8 @@ const updateJadwalKegiatan = async (req, res) => {
             jenis_kegiatan: jenis_kegiatan || jadwal.jenis_kegiatan,
             keterangan: keterangan || jadwal.keterangan,
             jam_mulai: jam_mulai !== undefined ? jam_mulai : jadwal.jam_mulai,
-            jam_selesai: jam_selesai !== undefined ? jam_selesai : jadwal.jam_selesai
+            jam_selesai: jam_selesai !== undefined ? jam_selesai : jadwal.jam_selesai,
+            include_absen: include_absen !== undefined ? include_absen : jadwal.include_absen
         });
         
         res.status(200).json({
@@ -286,17 +289,17 @@ const getJadwalKegiatanById = async (req, res) => {
         const lokasiWithSatker = [];
         if (jadwal.Lokasis && jadwal.Lokasis.length > 0) {
             for (const lokasi of jadwal.Lokasis) {
-                const satkerList = await JadwalKegiatanLokasiSkpd.findAll({
+                const satkerList = await JadwalKegiatanLokasiSatker.findAll({
                     where: {
                         id_kegiatan: id_kegiatan,
                         lokasi_id: lokasi.lokasi_id
                     },
-                    attributes: ['kdskpd']
+                    attributes: ['id_satker']
                 });
                 
                 lokasiWithSatker.push({
                     ...lokasi.toJSON(),
-                    satker_list: satkerList.map(s => s.kdskpd) // kdskpd sekarang berisi kode satker
+                    satker_list: satkerList.map(s => s.id_satker) // kdskpd sekarang berisi kode satker
                 });
             }
         }
@@ -372,7 +375,7 @@ const getLokasiKegiatan = async (req, res) => {
         }
         
         // Dapatkan semua lokasi yang terkait dengan jadwal kegiatan ini
-        const lokasiKegiatan = await JadwalKegiatanLokasiSkpd.findAll({
+        const lokasiKegiatan = await JadwalKegiatanLokasiSatker.findAll({
             where: { id_kegiatan },
             include: [
                 {
@@ -398,7 +401,7 @@ const getLokasiKegiatan = async (req, res) => {
                     satker_list: [] // kdskpd sekarang berisi kode satker
                 });
             }
-            lokasiMap.get(lokasiId).satker_list.push(item.kdskpd);
+            lokasiMap.get(lokasiId).satker_list.push(item.id_satker);
         });
         
         const lokasiList = Array.from(lokasiMap.values());
@@ -470,11 +473,11 @@ const addLokasiToKegiatan = async (req, res) => {
         }
         
         // Debug: tampilkan Satker yang sudah ada untuk lokasi ini
-        const currentSatker = await JadwalKegiatanLokasiSkpd.findAll({
+        const currentSatker = await JadwalKegiatanLokasiSatker.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId },
-            attributes: ['kdskpd']
+            attributes: ['id_satker']
         });
-        console.log('Current Satker for this location:', currentSatker.map(s => s.kdskpd));
+        console.log('Current Satker for this location:', currentSatker.map(s => s.id_satker));
         
         // Tambahkan Satker ke lokasi kegiatan
         const relasiList = [];
@@ -484,9 +487,9 @@ const addLokasiToKegiatan = async (req, res) => {
             try {
                 console.log(`Processing Satker: ${kdsatker}`);
                 
-                // Cek apakah kombinasi id_kegiatan, lokasi_id, dan kdsatker sudah ada
-                const existingRelasi = await JadwalKegiatanLokasiSkpd.findOne({
-                    where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId, kdskpd: kdsatker }
+                // Cek apakah kombinasi id_kegiatan, lokasi_id, dan id_satker sudah ada
+                const existingRelasi = await JadwalKegiatanLokasiSatker.findOne({
+                    where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId, id_satker: kdsatker }
                 });
                 
                 if (existingRelasi) {
@@ -496,10 +499,10 @@ const addLokasiToKegiatan = async (req, res) => {
                 }
                 
                 console.log(`Creating new relation for Satker: ${kdsatker}`);
-                const relasi = await JadwalKegiatanLokasiSkpd.create({
+                const relasi = await JadwalKegiatanLokasiSatker.create({
                     id_kegiatan: kegiatanId,
                     lokasi_id: lokasiId,
-                    kdskpd: kdsatker // Field kdskpd tetap sama, tapi sekarang berisi kode satker
+                    id_satker: kdsatker // Field id_satker berisi kode satker
                 });
                 relasiList.push(relasi);
                 console.log(`Satker ${kdsatker} berhasil ditambahkan dengan ID: ${relasi.id}`);
@@ -526,7 +529,7 @@ const addLokasiToKegiatan = async (req, res) => {
                     lng: lokasi.lng
                 },
                 satker_added: relasiList.length,
-                satker_list: relasiList.map(r => r.kdskpd),
+                satker_list: relasiList.map(r => r.id_satker),
                 existing_satker: existingSatker.length > 0 ? existingSatker : undefined,
                 total_requested: kdsatker_list.length,
                 summary: {
@@ -561,7 +564,7 @@ const removeLokasiFromKegiatan = async (req, res) => {
         }
         
         // Hapus semua relasi untuk lokasi ini
-        const deletedCount = await JadwalKegiatanLokasiSkpd.destroy({
+        const deletedCount = await JadwalKegiatanLokasiSatker.destroy({
             where: { id_kegiatan, lokasi_id }
         });
         
@@ -637,7 +640,7 @@ const editLokasiKegiatan = async (req, res) => {
         }
         
         // Cek apakah ada relasi dengan lokasi lama
-        const existingRelations = await JadwalKegiatanLokasiSkpd.findAll({
+        const existingRelations = await JadwalKegiatanLokasiSatker.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: oldLokasiId }
         });
         
@@ -649,7 +652,7 @@ const editLokasiKegiatan = async (req, res) => {
         }
         
         // Cek apakah lokasi baru sudah digunakan untuk kegiatan ini
-        const existingNewRelations = await JadwalKegiatanLokasiSkpd.findAll({
+        const existingNewRelations = await JadwalKegiatanLokasiSatker.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: newLokasiId }
         });
         
@@ -661,7 +664,7 @@ const editLokasiKegiatan = async (req, res) => {
         }
         
         // Update semua relasi dari lokasi lama ke lokasi baru
-        const updatedCount = await JadwalKegiatanLokasiSkpd.update(
+        const updatedCount = await JadwalKegiatanLokasiSatker.update(
             { lokasi_id: newLokasiId },
             { where: { id_kegiatan: kegiatanId, lokasi_id: oldLokasiId } }
         );
@@ -682,7 +685,7 @@ const editLokasiKegiatan = async (req, res) => {
                     lng: newLokasi.lng
                 },
                 updated_relations: updatedCount[0],
-                affected_skpd: existingRelations.map(r => r.kdskpd)
+                affected_skpd: existingRelations.map(r => r.id_satker)
             }
         });
     } catch (error) {
@@ -737,16 +740,16 @@ const editSkpdKegiatanLokasi = async (req, res) => {
         }
         
         // Ambil Satker yang sudah ada untuk kombinasi ini
-        const currentSatker = await JadwalKegiatanLokasiSkpd.findAll({
+        const currentSatker = await JadwalKegiatanLokasiSatker.findAll({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
         });
         
-        const currentSatkerList = currentSatker.map(s => s.kdskpd);
+        const currentSatkerList = currentSatker.map(s => s.id_satker);
         console.log('Current Satker:', currentSatkerList);
         console.log('New Satker:', kdsatker_list);
         
         // Hapus semua Satker yang sudah ada
-        const deletedCount = await JadwalKegiatanLokasiSkpd.destroy({
+        const deletedCount = await JadwalKegiatanLokasiSatker.destroy({
             where: { id_kegiatan: kegiatanId, lokasi_id: lokasiId }
         });
         
@@ -759,10 +762,10 @@ const editSkpdKegiatanLokasi = async (req, res) => {
         for (const kdsatker of kdsatker_list) {
             try {
                 console.log(`Creating relation for Satker: ${kdsatker}`);
-                const relasi = await JadwalKegiatanLokasiSkpd.create({
+                const relasi = await JadwalKegiatanLokasiSatker.create({
                     id_kegiatan: kegiatanId,
                     lokasi_id: lokasiId,
-                    kdskpd: kdsatker // Field kdskpd tetap sama, tapi sekarang berisi kode satker
+                    id_satker: kdsatker // Field id_satker berisi kode satker
                 });
                 newRelations.push(relasi);
                 console.log(`Satker ${kdsatker} berhasil ditambahkan dengan ID: ${relasi.id}`);
@@ -785,7 +788,7 @@ const editSkpdKegiatanLokasi = async (req, res) => {
                     lng: lokasi.lng
                 },
                 previous_satker: currentSatkerList,
-                new_satker: newRelations.map(r => r.kdskpd),
+                new_satker: newRelations.map(r => r.id_satker),
                 failed_satker: failedSatker.length > 0 ? failedSatker : undefined,
                 summary: {
                     previous_count: currentSatkerList.length,
@@ -811,18 +814,110 @@ const getAllSatkerKegiatan = async (req, res) => {
     try {
         const { id_kegiatan } = req.params;
 
-        // Cari kegiatan beserta relasi Satker-nya
-        const kegiatan = await MasterJadwalKegiatan.findByPk(id_kegiatan,
-            {
+
+        // Ambil semua relasi lokasi-satker untuk kegiatan ini
+        const lokasiSatkerList = await JadwalKegiatanLokasiSatker.findAll({
+            where: { id_kegiatan },
             include: [
                 {
-                    model: JadwalKegiatanLokasiSkpd,
-                    as: 'satker_relasi',
+                    model: Lokasi,
+                    attributes: ['lokasi_id', 'ket']
                 }
-            ]
+            ],
+            order: [['id', 'ASC']]
         });
 
-        if (!kegiatan) {
+        // Dapatkan semua id_satker yang terlibat
+        const satkerIds = [...new Set(lokasiSatkerList.map(relasi => relasi.id_satker))];
+        
+        // Dapatkan data satker
+        const satkerData = await SatkerTbl.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                }
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
+        });
+
+        // Dapatkan count pegawai untuk setiap satker
+        const pegawaiCounts = await MstPegawai.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                },
+                STATUSAKTIF: 'AKTIF'  // Filter hanya pegawai aktif
+            },
+            attributes: [
+                'KDSATKER',
+                [Sequelize.fn('COUNT', Sequelize.col('NIP')), 'total_pegawai']
+            ],
+            group: ['KDSATKER']
+        });
+
+        // Dapatkan count kehadiran kegiatan untuk setiap satker
+        // Karena MstPegawai dan KehadiranKegiatan beda database, kita perlu query terpisah
+        const kehadiranData = await KehadiranKegiatan.findAll({
+            where: {
+                id_kegiatan: id_kegiatan
+            },
+            attributes: ['absen_nip']
+        });
+
+        // Dapatkan NIP yang hadir
+        const nipYangHadir = kehadiranData.map(k => k.absen_nip);
+        
+        // Dapatkan data pegawai yang hadir untuk mendapatkan satker mereka
+        const pegawaiYangHadir = await MstPegawai.findAll({
+            where: {
+                NIP: {
+                    [Op.in]: nipYangHadir
+                },
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                },
+                STATUSAKTIF: 'AKTIF'  // Filter hanya pegawai aktif
+            },
+            attributes: ['NIP', 'KDSATKER']
+        });
+
+        // Hitung kehadiran per satker
+        const kehadiranPerSatker = {};
+        pegawaiYangHadir.forEach(pegawai => {
+            const satker = pegawai.KDSATKER;
+            if (!kehadiranPerSatker[satker]) {
+                kehadiranPerSatker[satker] = 0;
+            }
+            kehadiranPerSatker[satker]++;
+        });
+
+        // Group by id_satker, setiap satker bisa punya banyak lokasi
+        const satkerMap = {};
+        lokasiSatkerList.forEach(relasi => {
+            const id_satker = relasi.id_satker;
+            const satker = satkerData.find(s => s.KDSATKER === id_satker);
+            const pegawaiCount = pegawaiCounts.find(p => p.KDSATKER === id_satker);
+            
+            if (!satkerMap[id_satker]) {
+                satkerMap[id_satker] = {
+                    id_satker,
+                    nama_satker: satker ? satker.NMSATKER : null,
+                    total_pegawai: pegawaiCount ? parseInt(pegawaiCount.dataValues.total_pegawai) : 0,
+                    total_kehadiran: kehadiranPerSatker[id_satker] || 0,
+                    lokasi: []
+                };
+            }
+            if (relasi.Lokasi) {
+                satkerMap[id_satker].lokasi.push({
+                    lokasi_id: relasi.Lokasi.lokasi_id,
+                    ket: relasi.Lokasi.ket
+                });
+            }
+        });
+
+        const satkerList = Object.values(satkerMap);
+
+        if (!satkerList) {
             return res.status(404).json({
                 success: false,
                 message: 'Kegiatan tidak ditemukan'
@@ -832,7 +927,7 @@ const getAllSatkerKegiatan = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            data: kegiatan
+            data: satkerList
         });
     } catch (error) {
         console.error('getAllSatkerKegiatan error:', error);
@@ -843,10 +938,549 @@ const getAllSatkerKegiatan = async (req, res) => {
     }
 };
 
-const getDetailSatkerKegiatan = async (req,res) => {
-    const {id_kegiatan, id_satker} = req.params
+const getDetailSatkerKegiatan = async (req, res) => {
+    try {
+        const { id_kegiatan, id_satker } = req.params;
 
-}
+        // Validasi parameter
+        if (!id_kegiatan || !id_satker) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID kegiatan dan ID satker harus disediakan'
+            });
+        }
+
+        // Dapatkan data satker
+        const satkerData = await SatkerTbl.findOne({
+            where: {
+                KDSATKER: id_satker
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
+        });
+
+        if (!satkerData) {
+            return res.status(404).json({
+                success: false,
+                message: 'Satker tidak ditemukan'
+            });
+        }
+
+        // Dapatkan semua pegawai aktif di satker ini
+        const pegawaiList = await MstPegawai.findAll({
+            where: {
+                KDSATKER: id_satker,
+                STATUSAKTIF: 'AKTIF'
+            },
+            attributes: ['NIP', 'NAMA', 'KDSATKER'],
+            order: [['NAMA', 'ASC']]
+        });
+
+        // Dapatkan NIP pegawai yang hadir untuk kegiatan ini
+        const kehadiranData = await KehadiranKegiatan.findAll({
+            where: {
+                id_kegiatan: id_kegiatan
+            },
+            attributes: ['absen_nip', 'absen_tgljam']
+        });
+
+        // Buat map kehadiran untuk lookup cepat
+        const kehadiranMap = {};
+        kehadiranData.forEach(k => {
+            kehadiranMap[k.absen_nip] = {
+                hadir: true,
+                absen_tgljam: k.absen_tgljam,
+            };
+        });
+
+        // Mapping pegawai dengan status kehadiran
+        const pegawaiWithAttendance = pegawaiList.map(pegawai => {
+            const kehadiran = kehadiranMap[pegawai.NIP];
+            return {
+                nip: pegawai.NIP,
+                nama: pegawai.NAMA,
+                nama_lengkap: `${pegawai.GLRDEPAN || ''} ${pegawai.NAMA} ${pegawai.GLRBELAKANG || ''}`.trim(),
+                hadir: !!kehadiran,
+                kehadiran_data: kehadiran ? {
+                    absen_tgljam: kehadiran.absen_tgljam,
+                } : null
+            };
+        });
+
+        // Hitung statistik
+        const totalPegawai = pegawaiWithAttendance.length;
+        const totalHadir = pegawaiWithAttendance.filter(p => p.hadir).length;
+        const totalTidakHadir = totalPegawai - totalHadir;
+        const persentaseKehadiran = totalPegawai > 0 ? Math.round((totalHadir / totalPegawai) * 100) : 0;
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                satker: {
+                    id_satker: satkerData.KDSATKER,
+                    nama_satker: satkerData.NMSATKER
+                },
+                statistik: {
+                    total_pegawai: totalPegawai,
+                    total_hadir: totalHadir,
+                    total_tidak_hadir: totalTidakHadir,
+                    persentase_kehadiran: persentaseKehadiran
+                },
+                pegawai: pegawaiWithAttendance
+            }
+        });
+
+    } catch (error) {
+        console.error('getDetailSatkerKegiatan error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+// Download Excel untuk semua satker dalam kegiatan
+const downloadBulkExcelKegiatan = async (req, res) => {
+    try {
+        const { id_kegiatan } = req.params;
+
+        // Dapatkan data kegiatan
+        const kegiatan = await MasterJadwalKegiatan.findByPk(id_kegiatan);
+        if (!kegiatan) {
+            return res.status(404).json({
+                success: false,
+                message: 'Kegiatan tidak ditemukan'
+            });
+        }
+
+        // Dapatkan semua satker untuk kegiatan ini
+        const lokasiSatkerList = await JadwalKegiatanLokasiSatker.findAll({
+            where: { id_kegiatan },
+            include: [
+                {
+                    model: Lokasi,
+                    attributes: ['lokasi_id', 'ket']
+                }
+            ],
+            order: [['id', 'ASC']]
+        });
+
+        const satkerIds = [...new Set(lokasiSatkerList.map(relasi => relasi.id_satker))];
+        
+        // Dapatkan data satker
+        const satkerData = await SatkerTbl.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                }
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
+        });
+
+        // Dapatkan semua pegawai aktif untuk semua satker
+        const allPegawaiList = await MstPegawai.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                },
+                STATUSAKTIF: 'AKTIF'
+            },
+            attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER'],
+            order: [['KDSATKER', 'ASC'], ['NAMA', 'ASC']]
+        });
+
+        // Dapatkan NIP pegawai yang hadir untuk kegiatan ini
+        const kehadiranData = await KehadiranKegiatan.findAll({
+            where: {
+                id_kegiatan: id_kegiatan
+            },
+            attributes: ['absen_nip', 'absen_tgljam', 'absen_kat']
+        });
+
+        // Buat map kehadiran untuk lookup cepat
+        const kehadiranMap = {};
+        kehadiranData.forEach(k => {
+            kehadiranMap[k.absen_nip] = {
+                hadir: true,
+                absen_tgljam: k.absen_tgljam,
+                absen_kat: k.absen_kat
+            };
+        });
+
+        // Buat workbook Excel
+        const workbook = new ExcelJS.Workbook();
+
+        // Buat sheet untuk setiap satker
+        const satkerMap = {};
+        
+        lokasiSatkerList.forEach(relasi => {
+            const id_satker = relasi.id_satker;
+            const satker = satkerData.find(s => s.KDSATKER === id_satker);
+            
+            if (!satkerMap[id_satker]) {
+                satkerMap[id_satker] = {
+                    id_satker,
+                    nama_satker: satker ? satker.NMSATKER : null,
+                    lokasi: []
+                };
+            }
+            if (relasi.Lokasi) {
+                satkerMap[id_satker].lokasi.push(relasi.Lokasi.ket);
+            }
+        });
+
+        // Buat sheet untuk setiap satker
+        Object.values(satkerMap).forEach(satker => {
+            // Filter pegawai untuk satker ini
+            const pegawaiSatker = allPegawaiList.filter(p => p.KDSATKER === satker.id_satker);
+            
+            // Mapping pegawai dengan status kehadiran
+            const pegawaiWithAttendance = pegawaiSatker.map(pegawai => {
+                const kehadiran = kehadiranMap[pegawai.NIP];
+                return {
+                    nip: pegawai.NIP,
+                    nama: pegawai.NAMA,
+                    gelar_depan: pegawai.GLRDEPAN || '',
+                    gelar_belakang: pegawai.GLRBELAKANG || '',
+                    nama_lengkap: `${pegawai.GLRDEPAN || ''} ${pegawai.NAMA} ${pegawai.GLRBELAKANG || ''}`.trim(),
+                    hadir: !!kehadiran,
+                    kehadiran_data: kehadiran ? {
+                        absen_tgljam: kehadiran.absen_tgljam,
+                        absen_kat: kehadiran.absen_kat
+                    } : null
+                };
+            });
+
+            // Hitung statistik
+            const totalPegawai = pegawaiWithAttendance.length;
+            const totalHadir = pegawaiWithAttendance.filter(p => p.hadir).length;
+            const totalTidakHadir = totalPegawai - totalHadir;
+            const persentaseKehadiran = totalPegawai > 0 ? Math.round((totalHadir / totalPegawai) * 100) : 0;
+
+            // Buat worksheet untuk satker ini
+            const worksheet = workbook.addWorksheet(satker.nama_satker || `Satker ${satker.id_satker}`);
+
+            // Tambahkan informasi laporan di atas
+            const titleRow = worksheet.addRow(['', '', '', 'LAPORAN KEHADIRAN PEGAWAI']);
+            titleRow.font = { bold: true, size: 16 };
+            titleRow.alignment = { horizontal: 'center' };
+            worksheet.addRow([]);
+            
+            worksheet.addRow(['', '', 'Satuan Kerja', `: ${satker.nama_satker}`]);
+            worksheet.addRow(['', '', 'Tanggal Kegiatan', `: ${new Date(kegiatan.tanggal_kegiatan).toLocaleDateString('id-ID')}`]);
+            worksheet.addRow(['', '', 'Waktu kegiatan', `: ${kegiatan.jam_mulai} - ${kegiatan.jam_selesai}`]);
+            worksheet.addRow(['', '', 'Nama kegiatan', `: ${kegiatan.keterangan}`]);
+            worksheet.addRow(['', '', 'Jenis Kegiatan', `: ${kegiatan.jenis_kegiatan}`]);
+            worksheet.addRow([]);
+            
+            const summaryTitleRow = worksheet.addRow(['', '', 'RINGKASAN KEHADIRAN']);
+            summaryTitleRow.font = { bold: true, size: 14 };
+            worksheet.addRow(['', '', 'Total Pegawai', `: ${totalPegawai}`]);
+            worksheet.addRow(['', '', 'Total Hadir', `: ${totalHadir}`]);
+            worksheet.addRow(['', '', 'Total Tidak Hadir', `: ${totalTidakHadir}`]);
+            worksheet.addRow(['', '', 'Persentase Kehadiran', `: ${persentaseKehadiran}%`]);
+            worksheet.addRow([]);
+
+            // Set header tabel dengan space di kiri
+            worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Status Kehadiran', 'Waktu Kehadiran']);
+            
+            // Style header tabel
+            const headerRow = worksheet.lastRow;
+            headerRow.font = { bold: true };
+            // Hanya beri warna pada cell header dari kolom awal (No) sampai kolom terakhir (Waktu Kehadiran)
+            for (let col = 2; col <= 6; col++) {
+                const cell = headerRow.getCell(col);
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE6F3FF' }
+                };
+            }
+
+            // Set column widths dengan space di kolom pertama
+            worksheet.getColumn(1).width = 3;   // Space/Empty column
+            worksheet.getColumn(2).width = 5;   // No
+            worksheet.getColumn(3).width = 20;  // NIP
+            worksheet.getColumn(4).width = 50;  // Nama Lengkap
+            worksheet.getColumn(5).width = 20;  // Status Kehadiran
+            worksheet.getColumn(6).width = 20;  // Waktu Kehadiran
+
+            // Tambahkan border pada header tabel
+            for (let col = 2; col <= 6; col++) {
+                const cell = headerRow.getCell(col);
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            }
+
+            // Tambahkan data dan border pada setiap row data
+            pegawaiWithAttendance.forEach((pegawai, index) => {
+                const waktuKehadiran = pegawai.kehadiran_data 
+                    ? new Date(pegawai.kehadiran_data.absen_tgljam).toLocaleTimeString('id-ID', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })
+                    : '-';
+                
+                const dataRow = worksheet.addRow([
+                    '', // Space column
+                    index + 1,
+                    pegawai.nip,
+                    pegawai.nama_lengkap,
+                    pegawai.hadir ? 'Hadir' : 'Tidak Hadir',
+                    waktuKehadiran
+                ]);
+
+                // Beri warna hanya pada kolom status kehadiran (kolom ke-5)
+                // Hadir: hijau muda, Tidak Hadir: merah muda
+                const fillColor = pegawai.hadir
+                    ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDFFFE0' } } // light green
+                    : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } }; // light red
+
+                dataRow.getCell(5).fill = fillColor;
+
+                // Tambahkan border pada setiap cell di row data (kolom 2-6)
+                for (let col = 2; col <= 6; col++) {
+                    const cell = dataRow.getCell(col);
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' }
+                    };
+                }
+            });
+        });
+
+        // Set filename
+        const tanggalKegiatan = new Date(kegiatan.tanggal_kegiatan).toLocaleDateString('id-ID');
+        const filename = `Laporan_Kehadiran_Semua_Satker_${kegiatan.jenis_kegiatan.replace(/\s+/g, '_')}_${tanggalKegiatan.replace(/\//g, '-')}.xlsx`;
+
+        // Set response headers
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('downloadBulkExcelKegiatan error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
+// Download Excel untuk detail satker
+const downloadSatkerExcelKegiatan = async (req, res) => {
+    try {
+        const { id_kegiatan, id_satker } = req.params;
+
+        // Validasi parameter
+        if (!id_kegiatan || !id_satker) {
+            return res.status(400).json({
+                success: false,
+                message: 'ID kegiatan dan ID satker harus disediakan'
+            });
+        }
+
+        // Dapatkan data kegiatan
+        const kegiatan = await MasterJadwalKegiatan.findByPk(id_kegiatan);
+        if (!kegiatan) {
+            return res.status(404).json({
+                success: false,
+                message: 'Kegiatan tidak ditemukan'
+            });
+        }
+
+        // Dapatkan data satker
+        const satkerData = await SatkerTbl.findOne({
+            where: {
+                KDSATKER: id_satker
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
+        });
+
+        if (!satkerData) {
+            return res.status(404).json({
+                success: false,
+                message: 'Satker tidak ditemukan'
+            });
+        }
+
+        // Dapatkan semua pegawai aktif di satker ini
+        const pegawaiList = await MstPegawai.findAll({
+            where: {
+                KDSATKER: id_satker,
+                STATUSAKTIF: 'AKTIF'
+            },
+            attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER'],
+            order: [['NAMA', 'ASC']]
+        });
+
+        // Dapatkan NIP pegawai yang hadir untuk kegiatan ini
+        const kehadiranData = await KehadiranKegiatan.findAll({
+            where: {
+                id_kegiatan: id_kegiatan
+            },
+            attributes: ['absen_nip', 'absen_tgljam', 'absen_kat']
+        });
+
+        // Buat map kehadiran untuk lookup cepat
+        const kehadiranMap = {};
+        kehadiranData.forEach(k => {
+            kehadiranMap[k.absen_nip] = {
+                hadir: true,
+                absen_tgljam: k.absen_tgljam,
+                absen_kat: k.absen_kat
+            };
+        });
+
+        // Mapping pegawai dengan status kehadiran
+        const pegawaiWithAttendance = pegawaiList.map(pegawai => {
+            const kehadiran = kehadiranMap[pegawai.NIP];
+            return {
+                nip: pegawai.NIP,
+                nama: pegawai.NAMA,
+                gelar_depan: pegawai.GLRDEPAN || '',
+                gelar_belakang: pegawai.GLRBELAKANG || '',
+                nama_lengkap: `${pegawai.GLRDEPAN || ''} ${pegawai.NAMA} ${pegawai.GLRBELAKANG || ''}`.trim(),
+                hadir: !!kehadiran,
+                kehadiran_data: kehadiran ? {
+                    absen_tgljam: kehadiran.absen_tgljam,
+                    absen_kat: kehadiran.absen_kat
+                } : null
+            };
+        });
+
+        // Hitung statistik
+        const totalPegawai = pegawaiWithAttendance.length;
+        const totalHadir = pegawaiWithAttendance.filter(p => p.hadir).length;
+        const totalTidakHadir = totalPegawai - totalHadir;
+        const persentaseKehadiran = totalPegawai > 0 ? Math.round((totalHadir / totalPegawai) * 100) : 0;
+
+        // Buat workbook Excel
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Laporan Kehadiran Pegawai');
+
+        // Tambahkan informasi laporan di atas
+        const titleRow = worksheet.addRow(['', '', '', 'LAPORAN KEHADIRAN PEGAWAI']);
+        titleRow.font = { bold: true, size: 16 };
+        titleRow.alignment = { horizontal: 'center' };
+        worksheet.addRow([]);
+        
+        worksheet.addRow(['', '', 'Satuan Kerja',  `: ${satkerData.NMSATKER}`]);
+        worksheet.addRow(['', '', 'Tanggal Kegiatan',  `: ${new Date(kegiatan.tanggal_kegiatan).toLocaleDateString('id-ID')}`]);
+        worksheet.addRow(['', '', 'Waktu kegiatan',  `: ${kegiatan.jam_mulai} - ${kegiatan.jam_selesai}`]);
+        worksheet.addRow(['', '', 'Nama kegiatan',  `: ${kegiatan.keterangan}`]);
+        worksheet.addRow(['', '', 'Jenis Kegiatan',  `: ${kegiatan.jenis_kegiatan}`]);
+        worksheet.addRow([]);
+        
+        const summaryTitleRow = worksheet.addRow(['', '', 'RINGKASAN KEHADIRAN']);
+        summaryTitleRow.font = { bold: true, size: 14 };
+        worksheet.addRow(['', '', 'Total Pegawai',  `: ${totalPegawai}`]);
+        worksheet.addRow(['', '', 'Total Hadir',  `: ${totalHadir}`]);
+        worksheet.addRow(['', '', 'Total Tidak Hadir',  `: ${totalTidakHadir}`]);
+        worksheet.addRow(['', '', 'Persentase Kehadiran',  `: ${persentaseKehadiran}%`]);
+        worksheet.addRow([]);
+
+        // Set header tabel dengan space di kiri
+        worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Status Kehadiran', 'Waktu Kehadiran']);
+        
+        // Style header tabel
+        const headerRow = worksheet.lastRow;
+        headerRow.font = { bold: true };
+        // Hanya beri warna pada cell header dari kolom awal (No) sampai kolom terakhir (Waktu Kehadiran)
+        for (let col = 2; col <= 6; col++) {
+            const cell = headerRow.getCell(col);
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE6F3FF' }
+            };
+        }
+
+        // Set column widths dengan space di kolom pertama
+        worksheet.getColumn(1).width = 3;   // Space/Empty column
+        worksheet.getColumn(2).width = 5;   // No
+        worksheet.getColumn(3).width = 20;  // NIP
+        worksheet.getColumn(4).width = 50;  // Nama Lengkap
+        worksheet.getColumn(5).width = 20;  // Status Kehadiran
+        worksheet.getColumn(6).width = 20;  // Waktu Kehadiran
+
+        // Tambahkan border pada header tabel
+        for (let col = 2; col <= 6; col++) {
+            const cell = headerRow.getCell(col);
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+            };
+        }
+
+        // Tambahkan data dan border pada setiap row data
+        pegawaiWithAttendance.forEach((pegawai, index) => {
+            const waktuKehadiran = pegawai.kehadiran_data 
+                ? new Date(pegawai.kehadiran_data.absen_tgljam).toLocaleTimeString('id-ID', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })
+                : '-';
+            
+            const dataRow = worksheet.addRow([
+                '', // Space column
+                index + 1,
+                pegawai.nip,
+                pegawai.nama_lengkap,
+                pegawai.hadir ? 'Hadir' : 'Tidak Hadir',
+                waktuKehadiran
+            ]);
+
+            // Beri warna hanya pada kolom status kehadiran (kolom ke-5)
+            // Hadir: hijau muda, Tidak Hadir: merah muda
+            const fillColor = pegawai.hadir
+                ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDFFFE0' } } // light green
+                : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } }; // light red
+
+            dataRow.getCell(5).fill = fillColor;
+
+            // Tambahkan border pada setiap cell di row data (kolom 2-6)
+            for (let col = 2; col <= 6; col++) {
+                const cell = dataRow.getCell(col);
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            }
+        });
+
+        // Set filename
+        const tanggalKegiatan = new Date(kegiatan.tanggal_kegiatan).toLocaleDateString('id-ID');
+        const filename = `Laporan_Kehadiran_${satkerData.NMSATKER.replace(/\s+/g, '_')}_${tanggalKegiatan.replace(/\//g, '-')}.xlsx`;
+
+        // Set response headers
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        // Write to response
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('downloadSatkerExcelKegiatan error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error'
+        });
+    }
+};
 
 module.exports = {
     getJadwalHariIni,
@@ -862,5 +1496,7 @@ module.exports = {
     editLokasiKegiatan,
     editSkpdKegiatanLokasi,
     getAllSatkerKegiatan,
-    getDetailSatkerKegiatan
+    getDetailSatkerKegiatan,
+    downloadBulkExcelKegiatan,
+    downloadSatkerExcelKegiatan
 }; 

@@ -16,12 +16,7 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: 'lokasi_id'
       });
 
-      // Relasi dengan kegiatan (opsional)
-      Kehadiran.belongsTo(models.MasterJadwalKegiatan, { 
-        foreignKey: 'id_kegiatan',
-        targetKey: 'id_kegiatan',
-        as: 'kegiatan'
-      });
+      // Relasi dengan kegiatan dihapus karena field id_kegiatan tidak ada di tabel kehadiran
     }
   }
 

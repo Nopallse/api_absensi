@@ -70,10 +70,10 @@ const getPegawaiByNip = async (nip) => {
     const pegawai = await MstPegawai.findOne({
       where: { NIP: nip },
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'SUBF',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
-        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
+        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF', 'NM_UNIT_KERJA'
       ]
     });
     return pegawai;
@@ -175,10 +175,10 @@ const getPegawaiBySkpd = async (kdskpd, options = {}) => {
         }
       ],
       attributes: options.attributes || [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'SUBF',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
-        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
+        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF', 'NM_UNIT_KERJA'
       ],
       order: options.order || [['NAMA', 'ASC']],
       limit: options.limit,
@@ -221,10 +221,10 @@ const searchPegawai = async (query, kdskpd = null, options = {}) => {
         }
       ],
       attributes: options.attributes || [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 
+        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'SUBF',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
-        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
+        'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF', 'NM_UNIT_KERJA'
       ],
       order: options.order || [['NAMA', 'ASC']],
       limit: options.limit || 50,

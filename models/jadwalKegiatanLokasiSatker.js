@@ -2,15 +2,15 @@
 const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
-  class JadwalKegiatanLokasiSkpd extends Model {
+  class JadwalKegiatanLokasiSatker extends Model {
     static associate(models) {
-      JadwalKegiatanLokasiSkpd.belongsTo(models.MasterJadwalKegiatan, { foreignKey: "id_kegiatan" });
-      JadwalKegiatanLokasiSkpd.belongsTo(models.Lokasi, { foreignKey: "lokasi_id" });
+      JadwalKegiatanLokasiSatker.belongsTo(models.MasterJadwalKegiatan, { foreignKey: "id_kegiatan" });
+      JadwalKegiatanLokasiSatker.belongsTo(models.Lokasi, { foreignKey: "lokasi_id" });
       // Note: Tidak ada relasi langsung dengan SkpdTbl karena berbeda database
     }
   }
   
-  JadwalKegiatanLokasiSkpd.init(
+  JadwalKegiatanLokasiSatker.init(
     {
       id: {
         type: DataTypes.INTEGER,
@@ -34,7 +34,7 @@ module.exports = (sequelize, DataTypes) => {
           key: 'lokasi_id'
         }
       },
-      kdskpd: {
+      id_satker: {
         type: DataTypes.STRING(10),
         allowNull: false,
         comment: 'Kode SKPD yang diarahkan ke lokasi ini'
@@ -53,8 +53,8 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       sequelize,
-      modelName: "JadwalKegiatanLokasiSkpd",
-      tableName: "jadwal_kegiatan_lokasi_skpd",
+      modelName: "JadwalKegiatanLokasiSatker",
+      tableName: "jadwal_kegiatan_lokasi_satker",
       underscored: true,
       timestamps: true,
       createdAt: 'created_at',
@@ -62,5 +62,5 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
   
-  return JadwalKegiatanLokasiSkpd;
+  return JadwalKegiatanLokasiSatker;
 }; 

@@ -37,16 +37,13 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         }
       ],
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'KODE_UNIT_KERJA','NM_UNIT_KERJA',
-        'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
+        'NIP', 'NAMA', 'KDSATKER', 'BIDANGF', 'KODE_UNIT_KERJA','NM_UNIT_KERJA',
+        'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
       ]
     });
 
-    
-    console.log('Master data found:', masterData.length);
-    console.log('Sample master data:', masterData[0]?.toJSON());
 
     // Ambil data Satker dan Bidang secara terpisah
     const kdsatkerList = [...new Set(masterData.map(p => p.KDSATKER).filter(Boolean))];
@@ -88,34 +85,14 @@ const mapUsersWithMasterData = async (users, options = {}) => {
         // Data dasar pegawai
         nama: pegawai.NAMA,
         nip: pegawai.NIP,
-        kdskpd: pegawai.KDSKPD,
         kdsatker: pegawai.KDSATKER,
         bidangf: pegawai.BIDANGF,
-        kdpangkat: pegawai.KDPANGKAT,
-        jenis_jabatan: pegawai.JENIS_JABATAN,
-        kdjenkel: pegawai.KDJENKEL,
-        tempatlhr: pegawai.TEMPATLHR,
-        tgllhr: pegawai.TGLLHR,
-        agama: pegawai.AGAMA,
-        alamat: pegawai.ALAMAT,
-        notelp: pegawai.NOTELP,
-        noktp: pegawai.NOKTP,
-        email: pegawai.EMAIL,
-        foto: pegawai.FOTO,
-        jenis_pegawai: pegawai.JENIS_PEGAWAI,
         kd_unit_kerja: pegawai.KODE_UNIT_KERJA,
         nm_unit_kerja: pegawai.NM_UNIT_KERJA,
         status_aktif: pegawai.STATUSAKTIF,
-        
-        // Data relasi
-        skpd: pegawai.SkpdTbl ? {
-          kdskpd: pegawai.SkpdTbl.KDSKPD,
-          nmskpd: pegawai.SkpdTbl.NMSKPD,
-          status_skpd: pegawai.SkpdTbl.StatusSKPD
-        } : null,
-        
         satker: satkerMap.get(pegawai.KDSATKER) || null,
         bidang: bidangMap.get(pegawai.BIDANGF) || null,
+        
       });
     });
 
@@ -134,23 +111,10 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           // Override dengan data master yang lebih lengkap
           nama: masterData.nama,
           nip: masterData.nip,
-          kdskpd: masterData.kdskpd,
           kdsatker: masterData.kdsatker,
           bidangf: masterData.bidangf,
           kd_unit_kerja: masterData.kd_unit_kerja,
           nm_unit_kerja: masterData.nm_unit_kerja,
-          kdpangkat: masterData.kdpangkat,
-          jenis_jabatan: masterData.jenis_jabatan,
-          kdjenkel: masterData.kdjenkel,
-          tempatlhr: masterData.tempatlhr,
-          tgllhr: masterData.tgllhr,
-          agama: masterData.agama,
-          alamat: masterData.alamat,
-          notelp: masterData.notelp,
-          noktp: masterData.noktp,
-          email: masterData.email,
-          foto: masterData.foto,
-          jenis_pegawai: masterData.jenis_pegawai,
           status_aktif: masterData.status_aktif,
           
           // Data relasi
@@ -164,22 +128,9 @@ const mapUsersWithMasterData = async (users, options = {}) => {
           ...userData,
           nama: null,
           nip: user.username,
-          kdskpd: null,
           kdsatker: null,
           bidangf: null,
           nm_unit_kerja: null,
-          kdpangkat: null,
-          jenis_jabatan: null,
-          kdjenkel: null,
-          tempatlhr: null,
-          tgllhr: null,
-          agama: null,
-          alamat: null,
-          notelp: null,
-          noktp: null,
-          email: null,
-          foto: null,
-          jenis_pegawai: null,
           status_aktif: "AKTIF",
           satker: null,
           bidang: null,
@@ -191,6 +142,121 @@ const mapUsersWithMasterData = async (users, options = {}) => {
     return usersWithMasterData;
   } catch (error) {
     console.error('Error mapping users with master data:', error);
+    throw error;
+  }
+};
+
+/**
+ * Optimized version of mapUsersWithMasterData - lebih cepat dengan parallel processing
+ * @param {Array} users - Array data user
+ * @returns {Array} Array data user yang sudah digabung dengan data master
+ */
+const mapUsersWithMasterDataOptimized = async (users) => {
+  try {
+    if (!users || users.length === 0) {
+      return [];
+    }
+
+    const usernames = users.map(user => user.username);
+    
+    // Optimasi: Gunakan parallel processing untuk semua query
+    const [masterData, satkerData, bidangData] = await Promise.all([
+      // Ambil data master pegawai
+      MstPegawai.findAll({
+        where: { NIP: usernames },
+        attributes: [
+          'NIP', 'NAMA', 'KDSATKER', 'BIDANGF', 'KODE_UNIT_KERJA', 'NM_UNIT_KERJA',
+          'STATUSAKTIF'
+        ]
+      }),
+      // Ambil semua data satker (cached)
+      SatkerTbl.findAll({
+        attributes: ['KDSATKER', 'NMSATKER']
+      }),
+      // Ambil semua data bidang (cached)
+      BidangTbl.findAll({
+        attributes: ['BIDANGF', 'NMBIDANG']
+      })
+    ]);
+
+    // Buat map untuk lookup cepat
+    const satkerMap = new Map();
+    satkerData.forEach(s => {
+      satkerMap.set(s.KDSATKER, {
+        kdsatker: s.KDSATKER,
+        nmsatker: s.NMSATKER
+      });
+    });
+
+    const bidangMap = new Map();
+    bidangData.forEach(b => {
+      bidangMap.set(b.BIDANGF, {
+        bidangf: b.BIDANGF,
+        nmbidang: b.NMBIDANG
+      });
+    });
+
+    const masterDataMap = new Map();
+    masterData.forEach(pegawai => {
+      masterDataMap.set(pegawai.NIP, {
+        nama: pegawai.NAMA,
+        nip: pegawai.NIP,
+        kdsatker: pegawai.KDSATKER,
+        bidangf: pegawai.BIDANGF,
+        kd_unit_kerja: pegawai.KODE_UNIT_KERJA,
+        nm_unit_kerja: pegawai.NM_UNIT_KERJA,
+        status_aktif: pegawai.STATUSAKTIF,
+        satker: satkerMap.get(pegawai.KDSATKER) || null,
+        bidang: bidangMap.get(pegawai.BIDANGF) || null,
+      });
+    });
+
+    // Gabungkan data user dengan data master
+    return users.map(user => {
+      const userData = user.toJSON ? user.toJSON() : user;
+      const masterData = masterDataMap.get(user.username);
+      
+      // Exclude sensitive data
+      delete userData.password_hash;
+      delete userData.auth_key;
+      
+      if (masterData) {
+        return {
+          ...userData,
+          nama: masterData.nama,
+          nip: masterData.nip,
+          kdsatker: masterData.kdsatker,
+          bidangf: masterData.bidangf,
+          kd_unit_kerja: masterData.kd_unit_kerja,
+          nm_unit_kerja: masterData.nm_unit_kerja,
+          status_aktif: masterData.status_aktif,
+          satker: masterData.satker,
+          bidang: masterData.bidang,
+          pegawai: {
+            nama: masterData.nama,
+            nip: masterData.nip
+          }
+        };
+      } else {
+        return {
+          ...userData,
+          nama: null,
+          nip: user.username,
+          kdsatker: null,
+          bidangf: null,
+          nm_unit_kerja: null,
+          status_aktif: "AKTIF",
+          satker: null,
+          bidang: null,
+          pegawai: {
+            nama: null,
+            nip: user.username
+          }
+        };
+      }
+    });
+  } catch (error) {
+    console.error('Error mapping users with master data (optimized):', error);
     throw error;
   }
 };
@@ -446,6 +512,7 @@ const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) =>
 
 module.exports = {
   mapUsersWithMasterData,
+  mapUsersWithMasterDataOptimized,
   getUserWithMasterData,
   getSkpdIdByUserLevel,
   filterUsersBySkpd,

@@ -1,4 +1,4 @@
-const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSkpd, KehadiranKegiatan } = require('../models');
+const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, KehadiranKegiatan, SatkerTbl, BidangTbl, BidangSub } = require('../models');
 const Sequelize = require('sequelize');
 const { Op } = Sequelize;
 const { validationResult } = require('express-validator');
@@ -16,10 +16,22 @@ const {
     getPegawaiByNip,
     searchPegawai
 } = require('../utils/masterDbUtils');
+const {
+    getUserFromCache,
+    getKegiatanFromCache,
+    getLokasiFromCache,
+    invalidateUserCache,
+    invalidateKegiatanCache,
+    invalidateLokasiCache,
+    cacheWrapper,
+    kegiatanCache
+} = require('../utils/cacheUtils');
 
 
 
+// OPTIMIZED VERSION - Target < 100ms untuk 3000 concurrent users
 const createKehadiranBiasa = async(req, res) => {
+    const startTime = Date.now();
     try {
         // Validasi request
         const errors = validationResult(req);
@@ -31,200 +43,116 @@ const createKehadiranBiasa = async(req, res) => {
         const userId = req.user.id;
         const userNip = req.user.username;
 
-        // Verifikasi user exists
-        const user = await User.findByPk(userId);
-        if (!user) {
-            return res.status(404).json({ success: false, error: "User tidak ditemukan" });
-        }
-
-        const lokasi = await Lokasi.findOne({where: {lokasi_id: lokasi_id}});
-
-        // Mendapatkan waktu saat ini dalam WIB
+        // PARALLEL QUERIES untuk performa maksimal
         const now = getWIBDate();
-
-        // Set tanggal hari ini jam 00:00 WIB
         const today = new Date(now);
         today.setHours(0, 0, 0, 0);
-
-        // Format tanggal untuk absen_tgl (YYYY-MM-DD)
         const absenTgl = getTodayDate();
-
-        // Ambil jadwal jam kerja berdasarkan organisasi pegawai
-        const pegawai = await MstPegawai.findOne({
-            where: { NIP: userNip }
-        });
-        
-        if (!pegawai) {
-            return res.status(404).json({ success: false, error: "Data pegawai tidak ditemukan" });
-        }
-
-        // Get active tipe from system settings
-        const tipeSetting = await SystemSetting.findOne({
-            where: { key: 'active_tipe_jadwal' }
-        });
-        
-        const activeTipe = tipeSetting ? tipeSetting.value : 'normal';
-
-        // Ambil assignment jam dinas berdasarkan organisasi pegawai
         const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
-
-        // Coba cari tanpa filter hari dan tipe dulu
-        const dinasSetjamTest = await DinasSetjam.findOne({
-            where: {
-                [Op.or]: [
-                    { id_skpd: pegawai.KDSKPD },
-                    { id_satker: pegawai.KDSATKER },
-                    { id_bidang: pegawai.BIDANGF }
-                ]
-            },
-            include: [
-                {
-                    model: JamDinas,
-                    as: 'jamDinas',
-                    include: [
-                        {
-                            model: JamDinasDetail,
-                            as: 'details'
-                        }
-                    ]
-                }
-            ]
-        });
-        
-        const dinasSetjam = await DinasSetjam.findOne({
-            where: {
-                [Op.or]: [
-                    { id_skpd: pegawai.KDSKPD },
-                    { id_satker: pegawai.KDSATKER },
-                    { id_bidang: pegawai.BIDANGF }
-                ]
-            },
-            include: [
-                {
-                    model: JamDinas,
-                    as: 'jamDinas',
-                    include: [
-                        {
-                            model: JamDinasDetail,
-                            as: 'details',
-                            where: { 
-                                tipe: activeTipe,
-                                hari: currentDay
-                            }
-                        }
-                    ]
-                }
-            ]
-        });
-
-        console.log("DinasSetjam found (with filters):", dinasSetjam ? 'YES' : 'NO');
-
-        // Jika tidak ketemu, coba cari dengan id_bidang null
-        let finalDinasSetjam = dinasSetjam;
-        if (!dinasSetjam || !dinasSetjam.jamDinas || !dinasSetjam.jamDinas.details || dinasSetjam.jamDinas.details.length === 0) {
-            console.log("Trying fallback search with id_bidang null");
-            finalDinasSetjam = await DinasSetjam.findOne({
-                where: {
-                    [Op.or]: [
-                        { id_skpd: pegawai.KDSKPD },
-                        { id_satker: pegawai.KDSATKER }
-                    ],
-                    id_bidang: null
-                },
-                include: [
-                    {
-                        model: JamDinas,
-                        as: 'jamDinas',
-                        include: [
-                            {
-                                model: JamDinasDetail,
-                                as: 'details',
-                                where: { 
-                                    tipe: activeTipe,
-                                    hari: currentDay
-                                }
-                            }
-                        ]
-                    }
-                ]
-            });
-            console.log("Fallback search result:", finalDinasSetjam ? 'YES' : 'NO');
-        }
-
-        // Jika masih tidak ketemu, coba tanpa filter hari (ambil semua detail lalu filter manual)
-        if (!finalDinasSetjam || !finalDinasSetjam.jamDinas || !finalDinasSetjam.jamDinas.details || finalDinasSetjam.jamDinas.details.length === 0) {
-            console.log("Trying search without day filter");
-            const dinasSetjamNoFilter = await DinasSetjam.findOne({
-                where: {
-                    [Op.or]: [
-                        { id_skpd: pegawai.KDSKPD },
-                        { id_satker: pegawai.KDSATKER }
-                    ],
-                    id_bidang: null
-                },
-                include: [
-                    {
-                        model: JamDinas,
-                        as: 'jamDinas',
-                        include: [
-                            {
-                                model: JamDinasDetail,
-                                as: 'details',
-                                where: { 
-                                    tipe: activeTipe
-                                }
-                            }
-                        ]
-                    }
-                ]
-            });
-            
-            if (dinasSetjamNoFilter && dinasSetjamNoFilter.jamDinas && dinasSetjamNoFilter.jamDinas.details) {
-                // Filter manual untuk hari yang sesuai
-                const todayDetails = dinasSetjamNoFilter.jamDinas.details.filter(detail => detail.hari === currentDay);
-                if (todayDetails.length > 0) {
-                    finalDinasSetjam = dinasSetjamNoFilter;
-                    finalDinasSetjam.jamDinas.details = todayDetails;
-                    console.log("Found details after manual filtering:", todayDetails.length);
-                }
-            }
-        }
-
-        if (!finalDinasSetjam || !finalDinasSetjam.jamDinas || !finalDinasSetjam.jamDinas.details || finalDinasSetjam.jamDinas.details.length === 0) {
-            return res.status(500).json({ success: false, error: "Konfigurasi jam kerja belum diatur untuk organisasi Anda" });
-        }
-
-        const jamDetail = finalDinasSetjam.jamDinas.details[0];
-        console.log("Jam Dinas Detail:", jamDetail);
-        // Parse jam checkin dan checkout dari jam dinas detail
-        const jamMasukBatas = parseTimeToDate(jamDetail.jam_masuk_selesai, today);
-        const jamKeluarBatas = parseTimeToDate(jamDetail.jam_pulang_mulai, today);
         const startOfDay = new Date(absenTgl);
         const endOfDay = new Date(absenTgl);
         endOfDay.setHours(23, 59, 59, 999);
 
-        // Cari kehadiran yang sudah ada untuk hari ini
-        const existingKehadiran = await Kehadiran.findOne({
-            where: {
-                absen_nip: userNip,
-                absen_tgl: {
-                    [Op.between]: [startOfDay, endOfDay]
-                }
-            },
-            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
-        });
+        // Jalankan semua query secara parallel dengan caching
+        const [
+            user,
+            lokasi,
+            pegawai,
+            tipeSetting,
+            existingKehadiran
+        ] = await Promise.all([
+            getUserFromCache(userId, () => User.findByPk(userId)),
+            getLokasiFromCache(lokasi_id, () => Lokasi.findByPk(lokasi_id)),
+            cacheWrapper(kegiatanCache, `pegawai_${userNip}`, () => MstPegawai.findOne({ where: { NIP: userNip } }), 600), // Cache 10 menit
+            cacheWrapper(kegiatanCache, 'active_tipe_jadwal', () => SystemSetting.findOne({ where: { key: 'active_tipe_jadwal' } }), 1800), // Cache 30 menit
+            Kehadiran.findOne({
+                where: {
+                    absen_nip: userNip,
+                    absen_tgl: { [Op.between]: [startOfDay, endOfDay] }
+                },
+                attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
+            })
+        ]);
 
+        // Validasi hasil query
+        if (!user) {
+            return res.status(404).json({ success: false, error: "User tidak ditemukan" });
+        }
+        if (!lokasi) {
+            return res.status(404).json({ success: false, error: "Lokasi tidak ditemukan" });
+        }
+        if (!pegawai) {
+            return res.status(404).json({ success: false, error: "Data pegawai tidak ditemukan" });
+        }
+
+        const activeTipe = tipeSetting ? tipeSetting.value : 'normal';
+
+        // OPTIMIZED: Query jam dinas dengan caching
+        const jamDetail = await cacheWrapper(
+            kegiatanCache, 
+            `jam_dinas_${pegawai.KDSATKER}_${activeTipe}_${currentDay}`,
+            async () => {
+                // Coba query utama dulu
+                const dinasSetjam = await DinasSetjam.findOne({
+                    where: { id_satker: pegawai.KDSATKER },
+                    include: [{
+                        model: JamDinas,
+                        as: 'jamDinas',
+                        include: [{
+                            model: JamDinasDetail,
+                            as: 'details',
+                            where: { tipe: activeTipe, hari: currentDay }
+                        }]
+                    }]
+                });
+
+                if (dinasSetjam?.jamDinas?.details?.length > 0) {
+                    return dinasSetjam.jamDinas.details[0];
+                }
+
+                // Fallback: cari tanpa filter hari
+                const dinasSetjamFallback = await DinasSetjam.findOne({
+                    where: { id_satker: pegawai.KDSATKER, id_bidang: null },
+                    include: [{
+                        model: JamDinas,
+                        as: 'jamDinas',
+                        include: [{
+                            model: JamDinasDetail,
+                            as: 'details',
+                            where: { tipe: activeTipe }
+                        }]
+                    }]
+                });
+
+                if (dinasSetjamFallback?.jamDinas?.details) {
+                    const todayDetails = dinasSetjamFallback.jamDinas.details.filter(d => d.hari === currentDay);
+                    if (todayDetails.length > 0) {
+                        return todayDetails[0];
+                    }
+                }
+
+                return null;
+            },
+            300 // Cache 5 menit
+        );
+
+        if (!jamDetail) {
+            return res.status(500).json({ success: false, error: "Konfigurasi jam kerja belum diatur untuk organisasi Anda" });
+        }
+
+        // Parse jam checkin dan checkout
+        const jamMasukBatas = parseTimeToDate(jamDetail.jam_masuk_selesai, today);
+        const jamKeluarBatas = parseTimeToDate(jamDetail.jam_pulang_mulai, today);
+
+        // Handle berdasarkan type
         if (type === "masuk") {
-            if (existingKehadiran && existingKehadiran.absen_checkin) {
+            if (existingKehadiran?.absen_checkin) {
                 return res.status(400).json({ success: false, error: "Sudah melakukan kehadiran masuk hari ini" });
             }
 
-            // Format waktu untuk absen_checkin (HH:MM:SS)
             const absenCheckin = formatTime(now);
-            console.log(absenCheckin,"absen checkin");
-            console.log(jamMasukBatas,"jam masuk batas");
-            console.log(now,"now");
             const absenApel = getApelStatus(now, jamMasukBatas);
+            
             const newKehadiran = await Kehadiran.create({
                 absen_nip: userNip,
                 lokasi_id: lokasi_id,
@@ -235,35 +163,35 @@ const createKehadiranBiasa = async(req, res) => {
                 absen_kat: "HADIR"
             });
 
+            const endTime = Date.now();
+            console.log(`Create Kehadiran Masuk completed in ${endTime - startTime}ms`);
             return res.status(201).json({ success: true, data: newKehadiran });
 
         } else if (type === "keluar") {
             if (!existingKehadiran) {
                 return res.status(400).json({ success: false, error: "Belum melakukan kehadiran masuk" });
             }
-
             if (existingKehadiran.absen_checkout) {
                 return res.status(400).json({ success: false, error: "Sudah melakukan kehadiran keluar hari ini" });
             }
 
-            // Format waktu untuk absen_checkout (HH:MM:SS)
             const absenCheckout = formatTime(now);
-
-            // Tentukan status checkout
             const absenSore = getCheckoutStatus(now, jamKeluarBatas);
 
             existingKehadiran.absen_checkout = absenCheckout;
             existingKehadiran.absen_sore = absenSore;
-
             await existingKehadiran.save();
+
+            const endTime = Date.now();
+            console.log(`Create Kehadiran Keluar completed in ${endTime - startTime}ms`);
             return res.status(200).json({ success: true, data: existingKehadiran });
+
         } else if (type === "izin" || type === "sakit" || type === "cuti" || type === "dinas") {
             if (existingKehadiran) {
                 return res.status(400).json({ success: false, error: "Sudah melakukan kehadiran hari ini" });
             }
 
             const newKehadiran = await Kehadiran.create({
-                absen_id: null, // Akan di-generate otomatis jika autoincrement
                 absen_nip: userNip,
                 lokasi_id: lokasi_id,
                 absen_tgl: absenTgl,
@@ -271,12 +199,15 @@ const createKehadiranBiasa = async(req, res) => {
                 absen_kat: type
             });
 
+            const endTime = Date.now();
+            console.log(`Create Kehadiran ${type} completed in ${endTime - startTime}ms`);
             return res.status(201).json({ success: true, data: newKehadiran });
         }
 
         return res.status(400).json({ success: false, error: "Tipe kehadiran tidak valid" });
     } catch (error) {
-        console.error("Create Kehadiran Error:", error);
+        const endTime = Date.now();
+        console.error(`Create Kehadiran Error (${endTime - startTime}ms):`, error);
         return res.status(500).json({
             error: "Internal server error",
             details: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -296,9 +227,9 @@ const getTodayActivitiesForUser = async (kdsatker) => {
             },
             include: [
                 {
-                    model: JadwalKegiatanLokasiSkpd,
+                    model: JadwalKegiatanLokasiSatker,
                     where: {
-                        kdskpd: kdsatker // Filter langsung di database
+                        id_satker: kdsatker // Filter langsung di database
                     },
                     required: true, // INNER JOIN untuk performa lebih baik
                     include: [
@@ -311,13 +242,27 @@ const getTodayActivitiesForUser = async (kdsatker) => {
                             attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range'] // Hanya ambil field yang diperlukan
                         }
                     ],
-                    attributes: ['kdskpd'] // Hanya ambil field yang diperlukan
+                    attributes: ['id_satker'] // Hanya ambil field yang diperlukan
                 }
             ],
             attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'], // Hanya ambil field yang diperlukan
             order: [
                 ['jam_mulai', 'ASC']
             ]
+        });
+
+        // Dapatkan data satker untuk semua kegiatan
+        const satkerIds = [...new Set(activities.flatMap(activity => 
+            activity.JadwalKegiatanLokasiSatkers.map(jkls => jkls.id_satker)
+        ))];
+        
+        const satkerList = await SatkerTbl.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                }
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
         });
 
         return activities.map(activity => ({
@@ -327,14 +272,18 @@ const getTodayActivitiesForUser = async (kdsatker) => {
             keterangan: activity.keterangan,
             jam_mulai: activity.jam_mulai,
             jam_selesai: activity.jam_selesai,
-            lokasi_list: activity.JadwalKegiatanLokasiSkpds.map(jkls => ({
-                lokasi_id: jkls.Lokasi.lokasi_id,
-                ket: jkls.Lokasi.ket,
-                lat: jkls.Lokasi.lat,
-                lng: jkls.Lokasi.lng,
-                range: jkls.Lokasi.range,
-                satker: jkls.kdskpd
-            }))
+            lokasi_list: activity.JadwalKegiatanLokasiSatkers.map(jkls => {
+                const satker = satkerList.find(s => s.KDSATKER === jkls.id_satker);
+                return {
+                    lokasi_id: jkls.Lokasi.lokasi_id,
+                    ket: jkls.Lokasi.ket,
+                    lat: jkls.Lokasi.lat,
+                    lng: jkls.Lokasi.lng,
+                    range: jkls.Lokasi.range,
+                    satker: jkls.id_satker,
+                    nama_satker: satker ? satker.NMSATKER : null
+                };
+            })
         }));
     } catch (error) {
         console.error('Error getting today activities:', error);
@@ -387,24 +336,18 @@ const getKehadiranBiasaToday = async(req, res) => {
             pegawai.BIDANGF,   // idBidang
             null               // idSubBidang (tidak ada di data pegawai saat ini)
           ),
-          // Cek kehadiran kegiatan hari ini
-          KehadiranKegiatan.findAll({
-            where: {
-              absen_nip: userNip,
-              absen_tgl: {
-                [Op.between]: [startOfDay, endOfDay]
-              }
-            },
-            include: [
-              {
-                model: MasterJadwalKegiatan,
-                as: 'kegiatan',
-                attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
-              }
-            ],
-            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'id_kegiatan']
-          })
+          
         ]);
+
+        const log_json = {
+            success: true,
+            message: "Data kehadiran dan lokasi berhasil ditemukan",
+            data: {
+              kehadiran_biasa: kehadiranBiasa,
+              lokasi: effectiveLocation,
+            }
+        }
+        console.log('log_json', JSON.stringify(log_json, null, 2));
     
         return res.status(200).json({
           success: true,
@@ -740,28 +683,89 @@ const getAllKehadiran = async (req, res) => {
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
 
-        // Enrich kehadiran data with master employee data
+        // Enrich kehadiran data with master employee data - Optimized
         const enrichedKehadiran = await Promise.all(kehadiran.map(async (item) => {
             const kehadiranData = item.toJSON();
             
             // Get employee data from master database using utility
             const pegawaiData = await getPegawaiByNip(kehadiranData.absen_nip);
             
+            // Get organizational data
+            let satkerData = null;
+            let bidangData = null;
+            let subBidangData = null;
+            let namaUnitKerja = null;
+
+            if (pegawaiData) {
+                // Get Satker data
+                if (pegawaiData.KDSATKER) {
+                    const satker = await SatkerTbl.findByPk(pegawaiData.KDSATKER, {
+                        attributes: ['KDSATKER', 'NMSATKER']
+                    });
+                    if (satker) {
+                        satkerData = {
+                            kdsatker: satker.KDSATKER,
+                            nmsatker: satker.NMSATKER
+                        };
+                    }
+                }
+
+                // Get Bidang data
+                if (pegawaiData.BIDANGF) {
+                    const bidang = await BidangTbl.findByPk(pegawaiData.BIDANGF, {
+                        attributes: ['BIDANGF', 'NMBIDANG']
+                    });
+                    if (bidang) {
+                        bidangData = {
+                            bidangf: bidang.BIDANGF,
+                            nmbidang: bidang.NMBIDANG
+                        };
+                    }
+                }
+
+                // Get Sub Bidang data
+                if (pegawaiData.SUBF) {
+                    const subBidang = await BidangSub.findByPk(pegawaiData.SUBF, {
+                        attributes: ['SUBF', 'NMSUB']
+                    });
+                    if (subBidang) {
+                        subBidangData = {
+                            subf: subBidang.SUBF,
+                            nmsub: subBidang.NMSUB
+                        };
+                    }
+                }
+
+                // Determine nama unit kerja based on hierarchy
+                if (subBidangData) {
+                    namaUnitKerja = subBidangData.nmsub;
+                } else if (bidangData) {
+                    namaUnitKerja = bidangData.nmbidang;
+                } else if (satkerData) {
+                    namaUnitKerja = satkerData.nmsatker;
+                } else {
+                    namaUnitKerja = pegawaiData.NM_UNIT_KERJA || null;
+                }
+            }
+            
             return {
-                ...kehadiranData,
-                pegawai: pegawaiData ? {
-                    nip: pegawaiData.NIP,
-                    nama: pegawaiData.NAMA,
-                    kdskpd: pegawaiData.KDSKPD,
-                    kdsatker: pegawaiData.KDSATKER,
-                    bidangf: pegawaiData.BIDANGF,
-                    jenis_pegawai: pegawaiData.JENIS_PEGAWAI,
-                    status_aktif: pegawaiData.STATUSAKTIF,
-                    skpd: pegawaiData.SkpdTbl ? {
-                        kdskpd: pegawaiData.SkpdTbl.KDSKPD,
-                        nmskpd: pegawaiData.SkpdTbl.NMSKPD,
-                        status_skpd: pegawaiData.SkpdTbl.StatusSKPD
-                    } : null
+                pegawai: {
+                    nip: pegawaiData?.NIP || null,
+                    nama: pegawaiData?.NAMA || null
+                },
+                absen_checkin: kehadiranData.absen_checkin,
+                absen_checkout: kehadiranData.absen_checkout,
+                absen_apel: kehadiranData.absen_apel,
+                absen_sore: kehadiranData.absen_sore,
+                nama_unit_kerja: namaUnitKerja,
+                satker: satkerData,
+                bidang: bidangData,
+                sub_bidang: subBidangData,
+                lokasi: kehadiranData.Lokasi ? {
+                    lokasi_id: kehadiranData.lokasi_id,
+                    lat: kehadiranData.Lokasi.lat,
+                    lng: kehadiranData.Lokasi.lng,
+                    ket: kehadiranData.Lokasi.ket
                 } : null
             };
         }));
@@ -1106,9 +1110,9 @@ const getLokasiAbsenBerdasarkanJadwal = async (userNip) => {
         }
         
         // Cek apakah ada jadwal kegiatan hari ini dengan pembagian SKPD
-        const jadwalKegiatanSkpd = await JadwalKegiatanLokasiSkpd.findOne({
+        const jadwalKegiatanSkpd = await JadwalKegiatanLokasiSatker.findOne({
             where: {
-                kdskpd: pegawai.KDSKPD
+                id_satker: pegawai.KDSATKER
             },
             include: [
                 {
@@ -1124,14 +1128,14 @@ const getLokasiAbsenBerdasarkanJadwal = async (userNip) => {
         // Jika ada jadwal kegiatan dengan pembagian SKPD
         if (jadwalKegiatanSkpd) {
             console.log('Ada jadwal kegiatan hari ini dengan pembagian SKPD:', jadwalKegiatanSkpd.MasterJadwalKegiatan.jenis_kegiatan);
-            console.log('Lokasi kegiatan untuk SKPD', pegawai.KDSKPD, ':', jadwalKegiatanSkpd.Lokasi.ket);
+            console.log('Lokasi kegiatan untuk SKPD', pegawai.KDSATKER, ':', jadwalKegiatanSkpd.Lokasi.ket);
             
             return {
                 lokasi: jadwalKegiatanSkpd.Lokasi,
                 is_kegiatan: true,
                 jadwal_kegiatan: jadwalKegiatanSkpd.MasterJadwalKegiatan,
                 skpd_info: {
-                    kdskpd: pegawai.KDSKPD
+                    kdskpd: pegawai.KDSATKER
                 }
             };
         }
@@ -1636,8 +1640,90 @@ const checkTodayAttendance = async (req, res) => {
     }
 };
 
-// Fungsi untuk membuat kehadiran kegiatan
+// Fungsi helper untuk membuat kehadiran biasa dari kegiatan
+const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, waktuAbsen) => {
+    try {
+        const today = new Date();
+        const absenTgl = today.toISOString().split('T')[0];
+        const startOfDay = new Date(absenTgl);
+        const endOfDay = new Date(absenTgl);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Cek apakah sudah ada kehadiran biasa hari ini
+        const existingKehadiran = await Kehadiran.findOne({
+            where: {
+                absen_nip: userNip,
+                absen_tgl: {
+                    [Op.between]: [startOfDay, endOfDay]
+                }
+            }
+        });
+
+        if (existingKehadiran) {
+            console.log(`Kehadiran biasa sudah ada untuk ${userNip} hari ini`);
+            return existingKehadiran;
+        }
+
+        // Format waktu untuk absen_checkin (HH:MM:SS)
+        const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
+
+        // Tentukan status apel berdasarkan jam kegiatan
+        let absenApel = null;
+        let absenSore = null;
+        
+        if (kegiatan.include_absen === 'pagi' || kegiatan.include_absen === 'keduanya') {
+            // Jika kegiatan menggantikan absen pagi, set status apel
+            if (kegiatan.jam_mulai) {
+                const jamKegiatan = new Date(`2000-01-01T${kegiatan.jam_mulai}`);
+                const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                
+                // Jika absen sebelum atau sama dengan jam kegiatan, HAP (Hadir Apel Pagi)
+                // Jika absen setelah jam kegiatan, TAP (Telat Apel Pagi)
+                absenApel = jamAbsen <= jamKegiatan ? 'HAP' : 'TAP';
+            } else {
+                absenApel = 'HAP'; // Default HAP jika tidak ada jam kegiatan
+            }
+        }
+
+        if (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya') {
+            // Jika kegiatan menggantikan absen sore, set status sore
+            if (kegiatan.jam_selesai) {
+                const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
+                const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                
+                // Jika absen sebelum jam selesai kegiatan, HAS (Hadir Apel Sore)
+                // Jika absen setelah jam selesai kegiatan, CP (Cepat Pulang)
+                absenSore = jamAbsen < jamSelesaiKegiatan ? 'HAS' : 'CP';
+            } else {
+                absenSore = 'HAS'; // Default HAS jika tidak ada jam selesai kegiatan
+            }
+        }
+
+        // Buat kehadiran biasa
+        const kehadiranBiasa = await Kehadiran.create({
+            absen_nip: userNip,
+            lokasi_id: lokasiId,
+            absen_tgl: absenTgl,
+            absen_tgljam: waktuAbsen,
+            absen_checkin: absenCheckin,
+            absen_apel: absenApel,
+            absen_sore: absenSore,
+            absen_kat: 'HADIR'
+        });
+
+        console.log(`Kehadiran biasa otomatis dibuat untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
+        return kehadiranBiasa;
+
+    } catch (error) {
+        console.error('Error creating kehadiran biasa from kegiatan:', error);
+        // Jangan throw error agar tidak mengganggu proses utama
+        return null;
+    }
+};
+
+// Fungsi untuk membuat kehadiran kegiatan - OPTIMIZED VERSION
 const createKehadiranKegiatan = async (req, res) => {
+    const startTime = Date.now();
     try {
         const { id_kegiatan, latitude, longitude, lokasi_id } = req.body;
         const userId = req.user.id;
@@ -1651,8 +1737,35 @@ const createKehadiranKegiatan = async (req, res) => {
             });
         }
 
-        // Verifikasi user exists
-        const user = await User.findByPk(userId);
+        // PARALLEL QUERIES untuk performa maksimal
+        const today = new Date();
+        const todayString = today.toISOString().split('T')[0];
+        const startOfDay = new Date(todayString);
+        const endOfDay = new Date(todayString);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Jalankan semua query secara parallel dengan caching
+        const [
+            user,
+            kegiatan,
+            lokasi,
+            existingKehadiran
+        ] = await Promise.all([
+            getUserFromCache(userId, () => User.findByPk(userId)),
+            getKegiatanFromCache(id_kegiatan, () => MasterJadwalKegiatan.findByPk(id_kegiatan)),
+            getLokasiFromCache(lokasi_id, () => Lokasi.findByPk(lokasi_id)),
+            KehadiranKegiatan.findOne({
+                where: {
+                    absen_nip: userNip,
+                    id_kegiatan: id_kegiatan,
+                    absen_tgl: {
+                        [Op.between]: [startOfDay, endOfDay]
+                    }
+                }
+            })
+        ]);
+
+        // Validasi hasil query
         if (!user) {
             return res.status(404).json({ 
                 success: false,
@@ -1660,8 +1773,6 @@ const createKehadiranKegiatan = async (req, res) => {
             });
         }
 
-        // Verifikasi kegiatan exists
-        const kegiatan = await MasterJadwalKegiatan.findByPk(id_kegiatan);
         if (!kegiatan) {
             return res.status(404).json({ 
                 success: false,
@@ -1669,31 +1780,12 @@ const createKehadiranKegiatan = async (req, res) => {
             });
         }
 
-        // Verifikasi lokasi exists
-        const lokasi = await Lokasi.findByPk(lokasi_id);
         if (!lokasi) {
             return res.status(404).json({ 
                 success: false,
                 error: "Lokasi tidak ditemukan" 
             });
         }
-
-        // Cek apakah kegiatan sudah ada untuk user ini hari ini
-        const today = new Date();
-        const todayString = today.toISOString().split('T')[0]; // Format YYYY-MM-DD
-        const startOfDay = new Date(todayString);
-        const endOfDay = new Date(todayString);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        const existingKehadiran = await KehadiranKegiatan.findOne({
-            where: {
-                absen_nip: userNip,
-                id_kegiatan: id_kegiatan,
-                absen_tgl: {
-                    [Op.between]: [startOfDay, endOfDay]
-                }
-            }
-        });
 
         if (existingKehadiran) {
             return res.status(400).json({
@@ -1711,6 +1803,20 @@ const createKehadiranKegiatan = async (req, res) => {
             absen_tgljam: new Date(),
             absen_kat: 'HADIR'
         });
+
+        // Cek apakah kegiatan ini menggantikan absen biasa - ASYNC tanpa await
+        if (kegiatan.include_absen && kegiatan.include_absen !== 'none') {
+            // Jalankan di background tanpa menunggu
+            createKehadiranBiasaFromKegiatan(userNip, lokasi_id, kegiatan, kehadiranKegiatan.absen_tgljam)
+                .catch(err => console.error('Background kehadiran biasa error:', err));
+        }
+
+        // Invalidate cache yang relevan
+        invalidateUserCache(userId);
+        invalidateKegiatanCache(id_kegiatan);
+
+        const endTime = Date.now();
+        console.log(`Create Kehadiran Kegiatan completed in ${endTime - startTime}ms`);
 
         res.status(201).json({
             success: true,
@@ -1730,7 +1836,8 @@ const createKehadiranKegiatan = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Create Kehadiran Kegiatan Error:', error);
+        const endTime = Date.now();
+        console.error(`Create Kehadiran Kegiatan Error (${endTime - startTime}ms):`, error);
         res.status(500).json({
             success: false,
             error: 'Internal server error',
@@ -1766,12 +1873,12 @@ const getKehadiranKegiatan = async (req, res) => {
             where: kegiatanWhereCondition,
             include: [
                 {
-                    model: JadwalKegiatanLokasiSkpd,
+                    model: JadwalKegiatanLokasiSatker,
                     where: {
-                        kdskpd: pegawai.KDSATKER
+                        id_satker: pegawai.KDSATKER
                     },
                     required: true,
-                    attributes: ['id', 'kdskpd', 'lokasi_id']
+                    attributes: ['id', 'id_satker', 'lokasi_id']
                 }
             ],
             order: [['tanggal_kegiatan', 'DESC'], ['jam_mulai', 'ASC']],
@@ -1781,18 +1888,33 @@ const getKehadiranKegiatan = async (req, res) => {
 
         // Dapatkan lokasi untuk kegiatan-kegiatan tersebut
         const lokasiIds = [...new Set(kegiatanList.flatMap(k => 
-            k.JadwalKegiatanLokasiSkpds.map(jkls => jkls.lokasi_id)
+            k.JadwalKegiatanLokasiSatkers.map(jkls => jkls.lokasi_id)
         ))];
         
-        const lokasiList = await Lokasi.findAll({
-            where: {
-                lokasi_id: {
-                    [Op.in]: lokasiIds
+        // Dapatkan semua id_satker yang terlibat
+        const satkerIds = [...new Set(kegiatanList.flatMap(k => 
+            k.JadwalKegiatanLokasiSatkers.map(jkls => jkls.id_satker)
+        ))];
+        
+        const [lokasiList, satkerList] = await Promise.all([
+            Lokasi.findAll({
+                where: {
+                    lokasi_id: {
+                        [Op.in]: lokasiIds
+                    },
+                    status: true
                 },
-                status: true
-            },
-            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
-        });
+                attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
+            }),
+            SatkerTbl.findAll({
+                where: {
+                    KDSATKER: {
+                        [Op.in]: satkerIds
+                    }
+                },
+                attributes: ['KDSATKER', 'NMSATKER']
+            })
+        ]);
 
         // Dapatkan kehadiran user untuk kegiatan-kegiatan tersebut
         const kegiatanIds = kegiatanList.map(kegiatan => kegiatan.id_kegiatan);
@@ -1810,19 +1932,21 @@ const getKehadiranKegiatan = async (req, res) => {
         const kegiatanWithAttendance = kegiatanList.map(kegiatan => {
             const kehadiran = kehadiranUser.find(k => k.id_kegiatan === kegiatan.id_kegiatan);
             
-            // Pastikan JadwalKegiatanLokasiSkpds ada dan tidak null
-            const lokasiListData = kegiatan.JadwalKegiatanLokasiSkpds 
-                ? kegiatan.JadwalKegiatanLokasiSkpds
+            // Pastikan JadwalKegiatanLokasiSatkers ada dan tidak null
+            const lokasiListData = kegiatan.JadwalKegiatanLokasiSatkers 
+                ? kegiatan.JadwalKegiatanLokasiSatkers
                     .filter(jkls => jkls && jkls.lokasi_id) // Filter yang tidak null
                     .map(jkls => {
                         const lokasi = lokasiList.find(l => l.lokasi_id === jkls.lokasi_id);
+                        const satker = satkerList.find(s => s.KDSATKER === jkls.id_satker);
                         return lokasi ? {
                             lokasi_id: lokasi.lokasi_id,
                             ket: lokasi.ket,
                             lat: lokasi.lat,
                             lng: lokasi.lng,
                             range: lokasi.range,
-                            satker: jkls.kdskpd
+                            satker: jkls.id_satker,
+                            nama_satker: satker ? satker.NMSATKER : null
                         } : null;
                     })
                     .filter(l => l !== null) // Filter hasil null

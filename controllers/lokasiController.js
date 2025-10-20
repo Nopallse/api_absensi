@@ -1,4 +1,4 @@
-const { Lokasi, ViewDaftarUnitKerja } = require('../models');
+const { Lokasi } = require('../models');
 const { 
   getEffectiveLocation, 
   createOrUpdateLocation, 
@@ -14,44 +14,44 @@ const getAllLokasi = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { search, level, kd_unit_kerja } = req.query;
+    const { search } = req.query;
 
     let whereCondition = { status: true };
 
-    // Filter berdasarkan level
-    if (level) {
-      whereCondition.level_unit_kerja = level;
-    }
-
-    // Filter berdasarkan kode unit kerja
-    if (kd_unit_kerja) {
-      whereCondition.kd_unit_kerja = {
-        [require('sequelize').Op.like]: `${kd_unit_kerja}%`
-      };
-    }
 
     // Search
+    const { Op } = require('sequelize');
+
+    // Filter: jangan tampilkan yang id_satker, id_bidang, id_sub_bidang nya null
+    // Tampilkan jika setidaknya salah satu dari id_satker, id_bidang, id_sub_bidang tidak null
+    whereCondition = {
+      ...whereCondition,
+      [Op.or]: [
+        { id_satker: { [Op.ne]: null } },
+        { id_bidang: { [Op.ne]: null } },
+        { id_sub_bidang: { [Op.ne]: null } }
+      ]
+    };
+
     if (search) {
-      whereCondition[require('sequelize').Op.or] = [
-        { nama_lokasi: { [require('sequelize').Op.like]: `%${search}%` } },
-        { alamat: { [require('sequelize').Op.like]: `%${search}%` } },
-        { ket: { [require('sequelize').Op.like]: `%${search}%` } }
+      // Gabungkan pencarian dengan kondisi OR di atas
+      whereCondition[Op.and] = [
+        ...(whereCondition[Op.and] || []),
+        {
+          [Op.or]: [
+            { ket: { [Op.like]: `%${search}%` } }
+          ]
+        }
       ];
     }
 
     const { count, rows: lokasi } = await Lokasi.findAndCountAll({
       where: whereCondition,
-      include: [
-        {
-          model: ViewDaftarUnitKerja,
-          as: 'unitKerja',
-          attributes: ['nm_unit_kerja', 'jenis']
-        }
-      ],
       order: [
-        ['level_unit_kerja', 'ASC'],
-        ['is_inherited', 'ASC'],
-        ['kd_unit_kerja', 'ASC']
+        ['id_satker', 'ASC'],
+        ['id_bidang', 'ASC'],
+        ['id_sub_bidang', 'ASC'],
+        ['lokasi_id', 'ASC']
       ],
       limit,
       offset
@@ -82,14 +82,7 @@ const getLokasiById = async (req, res) => {
     const { id } = req.params;
 
     const lokasi = await Lokasi.findOne({
-      where: { lokasi_id: id, status: true },
-      include: [
-        {
-          model: ViewDaftarUnitKerja,
-          as: 'unitKerja',
-          attributes: ['nm_unit_kerja', 'jenis']
-        }
-      ]
+      where: { lokasi_id: id, status: true }
     });
 
     if (!lokasi) {
@@ -241,27 +234,33 @@ const getLokasiByLevel = async (req, res) => {
     const { kd_unit_kerja } = req.query;
 
     let whereCondition = { 
-      level_unit_kerja: parseInt(level),
       status: true 
     };
 
+    // Filter berdasarkan level menggunakan id_satker, id_bidang, id_sub_bidang
+    if (level === '1') {
+      whereCondition.id_satker = { [require('sequelize').Op.ne]: null };
+      whereCondition.id_bidang = null;
+      whereCondition.id_sub_bidang = null;
+    } else if (level === '2') {
+      whereCondition.id_bidang = { [require('sequelize').Op.ne]: null };
+      whereCondition.id_sub_bidang = null;
+    } else if (level === '3') {
+      whereCondition.id_sub_bidang = { [require('sequelize').Op.ne]: null };
+    }
+
     // Filter berdasarkan kode unit kerja parent
     if (kd_unit_kerja) {
-      whereCondition.kd_unit_kerja = {
-        [require('sequelize').Op.like]: `${kd_unit_kerja}%`
-      };
+      whereCondition[require('sequelize').Op.or] = [
+        { id_satker: { [require('sequelize').Op.like]: `${kd_unit_kerja}%` } },
+        { id_bidang: { [require('sequelize').Op.like]: `${kd_unit_kerja}%` } },
+        { id_sub_bidang: { [require('sequelize').Op.like]: `${kd_unit_kerja}%` } }
+      ];
     }
 
     const lokasi = await Lokasi.findAll({
       where: whereCondition,
-      include: [
-        {
-          model: ViewDaftarUnitKerja,
-          as: 'unitKerja',
-          attributes: ['nm_unit_kerja', 'jenis']
-        }
-      ],
-      order: [['kd_unit_kerja', 'ASC']]
+      order: [['lokasi_id', 'ASC']]
     });
 
     res.json({

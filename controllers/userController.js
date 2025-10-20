@@ -1,8 +1,9 @@
-const { User, Lokasi, MstPegawai, SkpdTbl, AdmOpd, AdmUpt, MasterJadwalKegiatan, JadwalKegiatanLokasiSkpd, Kehadiran, KehadiranKegiatan } = require("../models");
+const { User, Lokasi, MstPegawai, SkpdTbl, AdmOpd, AdmUpt, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, Kehadiran, KehadiranKegiatan } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 const { 
   mapUsersWithMasterData, 
+  mapUsersWithMasterDataOptimized,
   getUserWithMasterData, 
   getSkpdIdByUserLevel, 
   searchUsersWithMasterData 
@@ -10,60 +11,63 @@ const {
 const { getPegawaiByNip } = require("../utils/masterDbUtils");
 const { getLokasiByUserData } = require("../utils/locationUtils");
 const { getEffectiveLocation } = require("../utils/lokasiHierarchyUtils");
+const { getTodayKegiatanFromCache } = require("../utils/cacheUtils");
 
 
 // Mendapatkan kegiatan hari ini dengan lokasinya (OPTIMIZED)
 const getTodayActivities = async (kdsatker) => {
   try {
-    const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
+    return await getTodayKegiatanFromCache(kdsatker, async () => {
+      const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
 
-    // Query yang dioptimasi dengan filter langsung di database
-    const activities = await MasterJadwalKegiatan.findAll({
-      where: {
-        tanggal_kegiatan: today
-      },
-      include: [
-        {
-          model: JadwalKegiatanLokasiSkpd,
-          where: {
-            kdskpd: kdsatker // Filter langsung di database
-          },
-          required: true, // INNER JOIN untuk performa lebih baik
-          include: [
-            {
-              model: Lokasi,
-              where: {
-                status: true
-              },
-              required: true,
-              attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range'] // Hanya ambil field yang diperlukan
-            }
-          ],
-          attributes: ['kdskpd'] // Hanya ambil field yang diperlukan
-        }
-      ],
-      attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'], // Hanya ambil field yang diperlukan
-      order: [
-        ['jam_mulai', 'ASC']
-      ]
+      // Query yang dioptimasi dengan filter langsung di database
+      const activities = await MasterJadwalKegiatan.findAll({
+        where: {
+          tanggal_kegiatan: today
+        },
+        include: [
+          {
+            model: JadwalKegiatanLokasiSatker,
+            where: {
+              id_satker: kdsatker // Filter langsung di database
+            },
+            required: true, // INNER JOIN untuk performa lebih baik
+            include: [
+              {
+                model: Lokasi,
+                where: {
+                  status: true
+                },
+                required: true,
+                attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range'] // Hanya ambil field yang diperlukan
+              }
+            ],
+            attributes: ['id_satker'] // Hanya ambil field yang diperlukan
+          }
+        ],
+        attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'], // Hanya ambil field yang diperlukan
+        order: [
+          ['jam_mulai', 'ASC']
+        ]
+      });
+
+      return activities.map(activity => ({
+        id_kegiatan: activity.id_kegiatan,
+        tanggal_kegiatan: activity.tanggal_kegiatan,
+        jenis_kegiatan: activity.jenis_kegiatan,
+        keterangan: activity.keterangan,
+        jam_mulai: activity.jam_mulai,
+        jam_selesai: activity.jam_selesai,
+        lokasi_list: activity.JadwalKegiatanLokasiSatkers.map(jkls => ({
+          lokasi_id: jkls.Lokasi.lokasi_id,
+          ket: jkls.Lokasi.ket,
+          lat: jkls.Lokasi.lat,
+          lng: jkls.Lokasi.lng,
+          range: jkls.Lokasi.range,
+          satker: jkls.id_satker
+        }))
+      }));
     });
-
-    return activities.map(activity => ({
-      id_kegiatan: activity.id_kegiatan,
-      tanggal_kegiatan: activity.tanggal_kegiatan,
-      jenis_kegiatan: activity.jenis_kegiatan,
-      keterangan: activity.keterangan,
-      jam_mulai: activity.jam_mulai,
-      jam_selesai: activity.jam_selesai,
-      lokasi_list: activity.JadwalKegiatanLokasiSkpds.map(jkls => ({
-        lokasi_id: jkls.Lokasi.lokasi_id,
-        ket: jkls.Lokasi.ket,
-        lat: jkls.Lokasi.lat,
-        lng: jkls.Lokasi.lng,
-        range: jkls.Lokasi.range,
-        satker: jkls.kdskpd
-      }))
-    }));
   } catch (error) {
     console.error('Error getting today activities:', error);
     return [];
@@ -95,17 +99,18 @@ const getAllUser = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { search, status, id_satker: filter_satker, bidangf: filter_bidang } = req.query; // Support search, status, dan filter organisasi
+    const { search, status, id_satker: filter_satker, bidangf: filter_bidang } = req.query;
     
-    // Ambil level user dari request (req.user.level)
+    // Ambil level user dari request (req.user.level) - Optimasi: hanya query jika diperlukan
     const userLevel = req.user.level;
     let id_skpd;
-    console.log(userLevel,"<<<<<<<<<<<<<<<<<<<<<<");
 
     if (userLevel === '1') {
       id_skpd = req.query.id_skpd;
     } else if (userLevel === '2' || userLevel === '3') {
+      // Optimasi: hanya ambil id_skpd tanpa include yang tidak perlu
       const user = await User.findByPk(req.user.id, {
+        attributes: ['id'],
         include: [
           {
             model: userLevel === '2' ? AdmOpd : AdmUpt,
@@ -116,146 +121,99 @@ const getAllUser = async (req, res) => {
       id_skpd = getSkpdIdByUserLevel(user, userLevel);
     }
 
-    let totalUsers;
-    let users;
+    // Build master data filter condition
+    let masterCondition = {
+      STATUSAKTIF: 'AKTIF'
+    };
 
-    // Jika ada search query, gunakan search function
+    // Apply organizational filters
+    if (id_skpd) masterCondition.KDSKPD = id_skpd;
+    if (filter_satker) masterCondition.KDSATKER = filter_satker;
+    if (filter_bidang) masterCondition.BIDANGF = filter_bidang;
+
+    // Add search condition if exists
     if (search) {
-      // For search, get total count from master data dengan filter STATUSAKTIF = 'AKTIF'
-      let masterSearchCondition = {
+      masterCondition = {
         [Op.and]: [
+          masterCondition,
           {
             [Op.or]: [
               { NIP: { [Op.like]: `%${search}%` } },
               { NAMA: { [Op.like]: `%${search}%` } }
             ]
-          },
-          { STATUSAKTIF: 'AKTIF' }
+          }
         ]
       };
-
-      // Apply organizational filters
-      let orgFilters = {};
-      if (id_skpd) orgFilters.KDSKPD = id_skpd;
-      if (filter_satker) orgFilters.KDSATKER = filter_satker;
-      if (filter_bidang) orgFilters.BIDANGF = filter_bidang;
-
-      if (Object.keys(orgFilters).length > 0) {
-        masterSearchCondition[Op.and].push(orgFilters);
-      }
-
-      // Count how many of those NIPs exist in User table
-      const masterNips = await MstPegawai.findAll({
-        where: masterSearchCondition,
-        attributes: ['NIP', 'NM_UNIT_KERJA']
-      });
-
-      const foundNips = masterNips.map(p => p.NIP);
-      
-      if (foundNips.length === 0) {
-        return res.json({
-          data: [],
-          pagination: {
-            totalItems: 0,
-            totalPages: 0,
-            currentPage: page,
-            itemsPerPage: limit
-          },
-          filter: id_skpd ? { id_skpd } : null,
-          searchQuery: search
-        });
-      }
-
-      // Tambahkan filter status jika ada
-      let userWhere = {
-        username: {
-          [Op.in]: foundNips
-        }
-      };
-      if (status !== undefined) {
-        userWhere.status = status;
-      }
-      totalUsers = await User.count({
-        where: userWhere
-      });
-
-      // Ambil user dengan pagination dan urutkan DESC
-      const userList = await User.findAll({
-        where: userWhere,
-        attributes: { exclude: ["password_hash"] },
-        limit: limit,
-        offset: offset,
-        order: [['id', 'DESC']],
-      });
-
-      // Map dengan data master menggunakan utility
-      users = await mapUsersWithMasterData(userList);
-
-    } else {
-      // Normal get all logic
-      // Build organizational filters dengan filter STATUSAKTIF = 'AKTIF'
-      let orgFilters = {
-        STATUSAKTIF: 'AKTIF'
-      };
-      if (id_skpd) orgFilters.KDSKPD = id_skpd;
-      if (filter_satker) orgFilters.KDSATKER = filter_satker;
-      if (filter_bidang) orgFilters.BIDANGF = filter_bidang;
-
-      // Ambil data master terlebih dahulu untuk filter
-      const pegawaiWithOrg = await MstPegawai.findAll({
-        where: orgFilters,
-        attributes: ['NIP', 'NM_UNIT_KERJA']
-      });
-
-      // Buat array NIP yang valid untuk filter
-      const validNips = pegawaiWithOrg.map(p => p.NIP);
-
-      if (validNips.length === 0) {
-        // Jika tidak ada data master, return empty
-        return res.json({
-          data: [],
-          pagination: {
-            totalItems: 0,
-            totalPages: 0,
-            currentPage: page,
-            itemsPerPage: limit
-          },
-          filter: orgFilters
-        });
-      }
-
-      // Hitung total user yang memiliki NIP valid
-      let userWhere = {
-        username: {
-          [Op.in]: validNips
-        }
-      };
-      if (status !== undefined) {
-        userWhere.status = status;
-      }
-
-      totalUsers = await User.count({
-        where: userWhere
-      });
-
-      // Ambil user dengan pagination dan urutkan DESC
-      const userList = await User.findAll({
-        where: userWhere,
-        attributes: { exclude: ["password_hash"] },
-        limit: limit,
-        offset: offset,
-        order: [['id', 'DESC']],
-      });
-
-      // Map dengan data master menggunakan utility
-      users = await mapUsersWithMasterData(userList);
     }
+
+    // Optimasi: Gunakan parallel processing untuk count dan data
+    const [masterNips, totalUsers] = await Promise.all([
+      // Ambil NIP yang valid dari master data
+      MstPegawai.findAll({
+        where: masterCondition,
+        attributes: ['NIP'],
+        limit: 1000 // Limit untuk performa
+      }),
+      // Hitung total user yang memiliki NIP valid
+      (async () => {
+        const validNips = await MstPegawai.findAll({
+          where: masterCondition,
+          attributes: ['NIP']
+        });
+        
+        if (validNips.length === 0) return 0;
+        
+        const nipList = validNips.map(p => p.NIP);
+        let userWhere = {
+          username: { [Op.in]: nipList }
+        };
+        if (status !== undefined) {
+          userWhere.status = status;
+        }
+        
+        return User.count({ where: userWhere });
+      })()
+    ]);
+
+    const foundNips = masterNips.map(p => p.NIP);
+    
+    if (foundNips.length === 0) {
+      return res.json({
+        data: [],
+        pagination: {
+          totalItems: 0,
+          totalPages: 0,
+          currentPage: page,
+          itemsPerPage: limit
+        },
+        filter: id_skpd ? { id_skpd } : null,
+        searchQuery: search || null
+      });
+    }
+
+    // Ambil user dengan pagination
+    let userWhere = {
+      username: { [Op.in]: foundNips }
+    };
+    if (status !== undefined) {
+      userWhere.status = status;
+    }
+
+    const userList = await User.findAll({
+      where: userWhere,
+      attributes: { exclude: ["password_hash","refresh_token","fcm_token","device_id","level"] },
+      limit: limit,
+      offset: offset,
+      order: [['id', 'DESC']],
+    });
+
+    // Optimasi: Map dengan data master menggunakan utility yang sudah dioptimasi
+    const users = await mapUsersWithMasterDataOptimized(userList);
 
     const totalPages = Math.ceil(totalUsers / limit);
 
     // Build filter response
     let filterResponse = {};
-    if (id_skpd) filterResponse.id_skpd = id_skpd;
     if (filter_satker) filterResponse.id_satker = filter_satker;
     if (filter_bidang) filterResponse.bidangf = filter_bidang;
 
@@ -325,7 +283,6 @@ const getUserById = async (req, res) => {
 
     // Buat userData object untuk lokasi utility
     const locationUserData = {
-      kdskpd: userData.kdskpd,
       kdsatker: userData.kdsatker,
       bidangf: userData.bidangf
     };
@@ -349,22 +306,7 @@ const getUserById = async (req, res) => {
   }
 };
 
-const updateUser = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { username, email, level, id_opd, id_upt, status } = req.body;
 
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({ error: "User tidak ditemukan" });
-    }
-
-    await user.update({ username, email, level, id_opd, id_upt, status });
-    res.json({ message: "User berhasil diperbarui" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
 
 // Update user by admin
 const updateUserByAdmin = async (req, res) => {
@@ -372,7 +314,7 @@ const updateUserByAdmin = async (req, res) => {
 
     console.log(req.body);
     const { id } = req.params;
-    const { username, email, level, id_opd, id_upt, status, device_id } = req.body;
+    const { device_id } = req.body;
 
     // Find user by ID
     const user = await User.findByPk(id);
@@ -398,12 +340,6 @@ const updateUserByAdmin = async (req, res) => {
 
     // Update user data
     const updateData = {};
-    if (username) updateData.username = username;
-    if (email) updateData.email = email;
-    if (level) updateData.level = level;
-    if (id_opd) updateData.id_opd = id_opd;
-    if (id_upt) updateData.id_upt = id_upt;
-    if (status !== undefined) updateData.status = status;
     updateData.device_id = device_id;
     console.log(updateData);
     await user.update(updateData);
@@ -567,7 +503,6 @@ module.exports = {
   getUser, 
   getAllUser, 
   getUserById, 
-  updateUser, 
   updateUserByAdmin, 
   searchUsersOpd, 
   saveFcmToken, 

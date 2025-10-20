@@ -7,39 +7,51 @@ const { Lokasi, SatkerTbl, BidangTbl, BidangSub } = require('../models');
  */
 const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = null) => {
   try {
-    // OPTIMIZED: Gunakan satu query dengan OR condition untuk mencari semua kemungkinan lokasi
-    const whereConditions = [
-      {
-        id_satker: idSatker,
-        status: true
-      }
-    ];
+   
 
-    // Tambahkan kondisi berdasarkan prioritas hierarki
-    if (idSubBidang && idBidang) {
+    let whereConditions = [];
+    const usedConditions = [];
+
+    if (idBidang == null && idSubBidang == null) {
+        // Hanya cari lokasi di level satker (termasuk yang status false)
       whereConditions.push({
         id_satker: idSatker,
-        id_bidang: idBidang,
-        id_sub_bidang: idSubBidang,
-        status: true
+        id_bidang: null,
+        id_sub_bidang: null
       });
-    }
-
-    if (idBidang) {
+      usedConditions.push('satker');
+    } else {
+      // Tambahkan kondisi sub_bidang jika ada (hanya yang status true)
+      if (idSubBidang && idBidang) {
+        whereConditions.push({
+          id_satker: idSatker,
+          id_bidang: idBidang,
+          id_sub_bidang: idSubBidang,
+          status: true
+        });
+        usedConditions.push('sub_bidang');
+      }
+      // Tambahkan kondisi bidang jika ada (hanya yang status true)
+      if (idBidang) {
+        whereConditions.push({
+          id_satker: idSatker,
+          id_bidang: idBidang,
+          id_sub_bidang: null,
+          status: true
+        });
+        usedConditions.push('bidang');
+      }
+      // Selalu tambahkan kondisi satker sebagai fallback (hanya yang status true)
       whereConditions.push({
         id_satker: idSatker,
-        id_bidang: idBidang,
+        id_bidang: null,
         id_sub_bidang: null,
         status: true
       });
+      usedConditions.push('satker');
     }
 
-    whereConditions.push({
-      id_satker: idSatker,
-      id_bidang: null,
-      id_sub_bidang: null,
-      status: true
-    });
+    console.log('[getEffectiveLocation] Kondisi lokasi yang dicek:', usedConditions);
 
     // Query dengan OR condition dan order by prioritas
     const locations = await Lokasi.findAll({
@@ -67,6 +79,9 @@ const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = nul
         level = 'satker';
         source = 'satker';
       }
+      console.log('lokasi', location.toJSON());
+      console.log('level', level);
+      console.log('source', source);
 
       return {
         ...location.toJSON(),

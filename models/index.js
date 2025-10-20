@@ -50,7 +50,7 @@ const masterJadwalKegiatanModel = require('./masterJadwalKegiatan.js')(mainSeque
 db[masterJadwalKegiatanModel.name] = masterJadwalKegiatanModel;
 
 // Load model relasi jadwal kegiatan lokasi SKPD
-const jadwalKegiatanLokasiSkpdModel = require('./jadwalKegiatanLokasiSkpd.js')(mainSequelize, Sequelize.DataTypes);
+const jadwalKegiatanLokasiSkpdModel = require('./jadwalKegiatanLokasiSatker.js')(mainSequelize, Sequelize.DataTypes);
 db[jadwalKegiatanLokasiSkpdModel.name] = jadwalKegiatanLokasiSkpdModel;
 
 // Load model admin log

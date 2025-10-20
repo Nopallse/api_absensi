@@ -31,13 +31,17 @@ const authMiddleware = (options = {}) => {
             device_id: user.device_id
           };
 
+
           // Validasi level jika diperlukan
           if (options.requireLevel && !checkUserLevel(user.level, options.requireLevel)) {
+            console.log('Level user:', user.level);
+            console.log('username:', user.username);
             return res.status(403).json({
               error: 'Akses ditolak. Level akses tidak mencukupi',
               code: 'INSUFFICIENT_LEVEL',
               required: options.requireLevel,
-              current: user.level
+              current: user.level,
+              username: user.username
             });
           }
           
@@ -108,11 +112,14 @@ const authMiddleware = (options = {}) => {
 
         // Validasi level jika diperlukan
         if (options.requireLevel && !checkUserLevel(user.level, options.requireLevel)) {
+          console.log('Level user:', user.level);
+          console.log('username:', user.username);
           return res.status(403).json({
             error: 'Akses ditolak. Level akses tidak mencukupi',
             code: 'INSUFFICIENT_LEVEL',
             required: options.requireLevel,
-            current: user.level
+            current: user.level,
+            username: user.username
           });
         }
 

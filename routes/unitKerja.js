@@ -7,7 +7,8 @@ const {
   getSubBidangDetail,
   setLocation,
   getLocationHierarchyController,
-  getSatkerLocations
+  getSatkerLocations,
+  activateLocation
 } = require('../controllers/unitKerjaController');
 
 // GET /api/unit-kerja - Mendapatkan semua satker
@@ -36,5 +37,14 @@ router.get('/:idSatker/locations', getSatkerLocations);
 
 // GET /api/unit-kerja/:id-satker/location-hierarchy - Mendapatkan hierarki lokasi
 router.get('/:idSatker/location-hierarchy', getLocationHierarchyController);
+
+// PUT /api/unit-kerja/:id-satker/activate-location - Mengaktifkan lokasi satker
+router.put('/:idSatker/activate-location', activateLocation);
+
+// PUT /api/unit-kerja/:id-satker/:id-bidang/activate-location - Mengaktifkan lokasi bidang
+router.put('/:idSatker/:idBidang/activate-location', activateLocation);
+
+// PUT /api/unit-kerja/:id-satker/:id-bidang/:id-sub-bidang/activate-location - Mengaktifkan lokasi sub-bidang
+router.put('/:idSatker/:idBidang/:idSubBidang/activate-location', activateLocation);
 
 module.exports = router;

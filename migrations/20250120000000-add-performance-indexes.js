@@ -7,13 +7,13 @@ module.exports = {
       name: 'idx_master_jadwal_kegiatan_tanggal'
     });
 
-    // Index untuk tabel JadwalKegiatanLokasiSkpd
-    await queryInterface.addIndex('jadwal_kegiatan_lokasi_skpd', ['kdskpd'], {
-      name: 'idx_jadwal_kegiatan_lokasi_skpd_kdskpd'
+    // Index untuk tabel JadwalKegiatanLokasiSatker
+    await queryInterface.addIndex('jadwal_kegiatan_lokasi_satker', ['id_satker'], {
+      name: 'idx_jadwal_kegiatan_lokasi_satker_id_satker'
     });
 
-    await queryInterface.addIndex('jadwal_kegiatan_lokasi_skpd', ['id_kegiatan'], {
-      name: 'idx_jadwal_kegiatan_lokasi_skpd_id_kegiatan'
+    await queryInterface.addIndex('jadwal_kegiatan_lokasi_satker', ['id_kegiatan'], {
+      name: 'idx_jadwal_kegiatan_lokasi_satker_id_kegiatan'
     });
 
     // Index untuk tabel Lokasi
@@ -61,16 +61,16 @@ module.exports = {
       name: 'idx_master_jadwal_kegiatan_tanggal_jam'
     });
 
-    await queryInterface.addIndex('jadwal_kegiatan_lokasi_skpd', ['id_kegiatan', 'kdskpd'], {
-      name: 'idx_jadwal_kegiatan_lokasi_skpd_kegiatan_kdskpd'
+    await queryInterface.addIndex('jadwal_kegiatan_lokasi_satker', ['id_kegiatan', 'id_satker'], {
+      name: 'idx_jadwal_kegiatan_lokasi_satker_kegiatan_id_satker'
     });
   },
 
   async down(queryInterface, Sequelize) {
     // Hapus semua index yang dibuat
     await queryInterface.removeIndex('master_jadwal_kegiatan', 'idx_master_jadwal_kegiatan_tanggal');
-    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_skpd', 'idx_jadwal_kegiatan_lokasi_skpd_kdskpd');
-    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_skpd', 'idx_jadwal_kegiatan_lokasi_skpd_id_kegiatan');
+    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_satker', 'idx_jadwal_kegiatan_lokasi_satker_id_satker');
+    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_satker', 'idx_jadwal_kegiatan_lokasi_satker_id_kegiatan');
     await queryInterface.removeIndex('lokasi', 'idx_lokasi_hierarchy_status');
     await queryInterface.removeIndex('lokasi', 'idx_lokasi_status');
     await queryInterface.removeIndex('mstpegawai', 'idx_mstpegawai_nip');
@@ -81,6 +81,6 @@ module.exports = {
     await queryInterface.removeIndex('kehadiran_kegiatan', 'idx_kehadiran_kegiatan_nip_tgl');
     await queryInterface.removeIndex('kehadiran_kegiatan', 'idx_kehadiran_kegiatan_id_kegiatan');
     await queryInterface.removeIndex('master_jadwal_kegiatan', 'idx_master_jadwal_kegiatan_tanggal_jam');
-    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_skpd', 'idx_jadwal_kegiatan_lokasi_skpd_kegiatan_kdskpd');
+    await queryInterface.removeIndex('jadwal_kegiatan_lokasi_satker', 'idx_jadwal_kegiatan_lokasi_satker_kegiatan_id_satker');
   }
 };

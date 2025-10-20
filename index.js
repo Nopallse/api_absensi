@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const compression = require("compression");
+const rateLimit = require("express-rate-limit");
 const authRoutes = require("./routes/auth");
 const kehadiranRoutes = require("./routes/kehadiran");
 const usersRoutes = require("./routes/user");
@@ -13,6 +15,7 @@ const jadwalKegiatanRoutes = require("./routes/jadwalKegiatan");
 const jadwalKegiatanLokasiSatkerRoutes = require("./routes/jadwalKegiatanLokasiSatker");
 const viewDaftarUnitKerjaRoutes = require("./routes/viewDaftarUnitKerja");
 const docsRoutes = require("./routes/docs");
+const performanceRoutes = require("./routes/performance");
 const path = require("path");
 const distPath = path.join(__dirname, "../fe/dist");
 
@@ -22,7 +25,25 @@ const { mainSequelize, masterSequelize } = require('./config/database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Rate limiting untuk mencegah abuse - Optimized for 3000+ users
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 menit
+  max: 50, // Maksimal 50 request per menit per IP (untuk 3000 users = 150,000 req/min total)
+  message: {
+    success: false,
+    error: 'Terlalu banyak request, coba lagi nanti'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting untuk health check dan performance monitoring
+    return req.path === '/api/performance/stats' || req.path.startsWith('/api/performance/debug');
+  }
+});
+
 // Middleware
+app.use(compression()); // Kompresi response untuk performa lebih baik
+app.use(limiter); // Rate limiting
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT','OPTIONS'],
@@ -68,6 +89,7 @@ app.use("/api/jadwal-kegiatan", jadwalKegiatanRoutes);
 app.use("/api/jadwal-kegiatan-lokasi-satker", jadwalKegiatanLokasiSatkerRoutes);
 app.use("/api/view-daftar-unit-kerja", viewDaftarUnitKerjaRoutes);
 app.use("/api/docs", docsRoutes);
+app.use("/api/performance", performanceRoutes);
 
 // Static files and catch-all route should come AFTER API routes
 app.use(express.static(distPath));

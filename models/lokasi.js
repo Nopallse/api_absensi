@@ -8,9 +8,9 @@ module.exports = (sequelize, DataTypes) => {
       Lokasi.hasMany(models.Kehadiran, { foreignKey: "lokasi_id" });
       
       // Relasi ke tabel jadwal kegiatan
-      Lokasi.hasMany(models.JadwalKegiatanLokasiSkpd, { foreignKey: "lokasi_id" });
+      Lokasi.hasMany(models.JadwalKegiatanLokasiSatker, { foreignKey: "lokasi_id" });
       Lokasi.belongsToMany(models.MasterJadwalKegiatan, { 
-        through: models.JadwalKegiatanLokasiSkpd,
+        through: models.JadwalKegiatanLokasiSatker,
         foreignKey: "lokasi_id",
         otherKey: "id_kegiatan"
       });

@@ -6,14 +6,14 @@ const {
     removeSkpdFromKegiatanLokasi,
     getSkpdByKegiatanLokasi,
     getLokasiKegiatanBySkpd,
-    getAllJadwalKegiatanLokasiSkpd,
+    getAllJadwalKegiatanLokasiSatker,
     getLokasiKegiatanForUser
 } = require('../controllers/jadwalKegiatanLokasiSkpdController');
 
 // Routes untuk management relasi jadwal kegiatan lokasi SKPD (requires admin OPD level or higher)
 router.get('/kegiatan/:id_kegiatan/lokasi/:lokasi_id', requireAdminOpd(), getSkpdByKegiatanLokasi);
 router.get('/skpd/:kdskpd', requireAdminOpd(), getLokasiKegiatanBySkpd);
-router.get('/all', requireAdminOpd(), getAllJadwalKegiatanLokasiSkpd);
+router.get('/all', requireAdminOpd(), getAllJadwalKegiatanLokasiSatker);
 
 // Route khusus untuk user (public access for mobile app)
 router.get('/user-location', getLokasiKegiatanForUser);

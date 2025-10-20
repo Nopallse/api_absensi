@@ -83,7 +83,6 @@ const adminLogMiddleware = (options = {}) => {
           resource: resource,
           resource_id: resourceId,
           description: description,
-          ip_address: getClientIP(req),
           user_agent: getUserAgent(req),
           request_data: logRequest ? sanitizeData(req.body) : null,
           response_status: res.statusCode,
@@ -104,7 +103,6 @@ const adminLogMiddleware = (options = {}) => {
         action: action,
         resource: resource,
         error: error,
-        ip_address: getClientIP(req),
         user_agent: getUserAgent(req),
         duration_ms: duration
       });
@@ -147,7 +145,6 @@ const adminAuthLogMiddleware = (action) => {
             action: action,
             resource: 'authentication',
             description: `${action} ${adminInfo.username || responseData?.user?.username}`,
-            ip_address: getClientIP(req),
             user_agent: getUserAgent(req),
             request_data: sanitizeData(req.body),
             response_status: res.statusCode,
@@ -197,7 +194,6 @@ const adminDeviceResetLogMiddleware = (action) => {
             resource: 'device_reset',
             resource_id: req.params.id || responseData?.data?.id,
             description: `${action} device reset request`,
-            ip_address: getClientIP(req),
             user_agent: getUserAgent(req),
             request_data: sanitizeData(req.body),
             response_status: res.statusCode,

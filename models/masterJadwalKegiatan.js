@@ -4,9 +4,9 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class MasterJadwalKegiatan extends Model {
     static associate(models) {
-      MasterJadwalKegiatan.hasMany(models.JadwalKegiatanLokasiSkpd, { foreignKey: "id_kegiatan" });
+      MasterJadwalKegiatan.hasMany(models.JadwalKegiatanLokasiSatker, { foreignKey: "id_kegiatan" });
       MasterJadwalKegiatan.belongsToMany(models.Lokasi, { 
-        through: models.JadwalKegiatanLokasiSkpd,
+        through: models.JadwalKegiatanLokasiSatker,
         foreignKey: "id_kegiatan",
         otherKey: "lokasi_id"
       });
@@ -51,6 +51,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TIME,
         allowNull: true,
         comment: 'Jam selesai kegiatan dalam format HH:MM:SS'
+      },
+      include_absen: {
+        type: DataTypes.ENUM('none', 'pagi', 'sore', 'keduanya'),
+        allowNull: false,
+        defaultValue: 'none',
+        comment: 'Ketentuan absen: none=Hanya kehadiran kegiatan, pagi=Menggantikan absen pagi, sore=Menggantikan absen sore, keduanya=Menggantikan absen pagi dan sore'
       }
     },
     {
