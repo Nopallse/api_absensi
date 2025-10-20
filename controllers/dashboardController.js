@@ -3,9 +3,10 @@ const {
     Kehadiran, 
     Lokasi, 
     DeviceResetRequest,
-    SkpdTbl,
     SatkerTbl,
-    BidangTbl
+    BidangTbl,
+    BidangSub,
+    MasterJadwalKegiatan
 } = require('../models');
 const Sequelize = require('sequelize');
 const { Op } = Sequelize;
@@ -25,15 +26,20 @@ const getSuperAdminDashboard = async (req, res) => {
         // === SYSTEM OVERVIEW ===
         const totalUsers = await User.count();
 
-        // === MASTER DATA STATISTICS ===
-        const totalSkpd = await SkpdTbl.count();
+        // === ORGANIZATIONAL STRUCTURE STATISTICS ===
         const totalSatker = await SatkerTbl.count();
         const totalBidang = await BidangTbl.count();
+        const totalSubBidang = await BidangSub.count();
 
-        // === LOCATION STATISTICS ===
-        const totalLocations = await Lokasi.count();
-        const activeLocations = await Lokasi.count({ where: { status: true } });
-        const inactiveLocations = await Lokasi.count({ where: { status: false } });
+        // === KEGIATAN HARI INI ===
+        const today = getTodayDate();
+        const kegiatanHariIni = await MasterJadwalKegiatan.findAll({
+            where: {
+                tanggal_kegiatan: today
+            },
+            order: [['jam_mulai', 'ASC']]
+        });
+
 
         // === DEVICE & SECURITY ===
         const pendingDeviceResets = await DeviceResetRequest.count({ 
@@ -42,7 +48,6 @@ const getSuperAdminDashboard = async (req, res) => {
 
 
         // === RECENT ATTENDANCE TODAY ===
-        const today = getTodayDate();
         const recentAttendanceToday = await Kehadiran.findAll({
             where: { 
                 absen_tgl: today 
@@ -164,16 +169,20 @@ const getSuperAdminDashboard = async (req, res) => {
                 systemOverview: {
                     totalUsers
                 },
-                masterDataStatistics: {
-                    totalSkpd,
+                organizationalStatistics: {
                     totalSatker,
-                    totalBidang
+                    totalBidang,
+                    totalSubBidang
                 },
-                locationStatistics: {
-                    totalLocations,
-                    activeLocations,
-                    inactiveLocations,
-                },
+                kegiatanHariIni: kegiatanHariIni.length > 0 ? kegiatanHariIni.map(kegiatan => ({
+                    id_kegiatan: kegiatan.id_kegiatan,
+                    tanggal_kegiatan: kegiatan.tanggal_kegiatan,
+                    jenis_kegiatan: kegiatan.jenis_kegiatan,
+                    keterangan: kegiatan.keterangan,
+                    jam_mulai: kegiatan.jam_mulai,
+                    jam_selesai: kegiatan.jam_selesai,
+                    include_absen: kegiatan.include_absen
+                })) : [],
         
                 kehadiranList: {
                     data: allKehadiran,

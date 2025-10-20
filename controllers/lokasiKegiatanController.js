@@ -11,7 +11,6 @@ const getAllLokasiKegiatan = async (req, res) => {
     let whereCondition = {
       id_satker: null,
       id_bidang: null,
-      id_sub_bidang: null
     };
 
     // Tambahkan search jika ada
@@ -19,7 +18,6 @@ const getAllLokasiKegiatan = async (req, res) => {
       whereCondition[require('sequelize').Op.and] = [
         { id_satker: null },
         { id_bidang: null },
-        { id_sub_bidang: null },
         {
           [require('sequelize').Op.or]: [
             { ket: { [require('sequelize').Op.like]: `%${search}%` } }
@@ -66,7 +64,6 @@ const getLokasiKegiatanById = async (req, res) => {
         lokasi_id: id,
         id_satker: null,
         id_bidang: null,
-        id_sub_bidang: null
       },
       attributes: ['lokasi_id', 'lat', 'lng', 'range', 'ket', 'status', 'createdAt', 'updatedAt']
     });
@@ -112,7 +109,6 @@ const createLokasiKegiatan = async (req, res) => {
     const lokasiData = {
       id_satker: null,
       id_bidang: null,
-      id_sub_bidang: null,
       lat: parseFloat(lat),
       lng: parseFloat(lng),
       range: parseInt(range) || 100,
@@ -146,7 +142,6 @@ const updateLokasiKegiatan = async (req, res) => {
         lokasi_id: id,
         id_satker: null,
         id_bidang: null,
-        id_sub_bidang: null
       }
     });
 
@@ -211,7 +206,6 @@ const deleteLokasiKegiatan = async (req, res) => {
         lokasi_id: id,
         id_satker: null,
         id_bidang: null,
-        id_sub_bidang: null
       }
     });
 
@@ -248,7 +242,6 @@ const updateStatusLokasiKegiatan = async (req, res) => {
         lokasi_id: id,
         id_satker: null,
         id_bidang: null,
-        id_sub_bidang: null
       }
     });
 

@@ -5,7 +5,7 @@ const {
   mapUsersWithMasterData, 
   mapUsersWithMasterDataOptimized,
   getUserWithMasterData, 
-  getSkpdIdByUserLevel, 
+  getSatkerIdByUserLevel, 
   searchUsersWithMasterData 
 } = require("../utils/userMasterUtils");
 const { getPegawaiByNip } = require("../utils/masterDbUtils");
@@ -95,47 +95,23 @@ const getUser = async (req, res) => {
 
 const getAllUser = async (req, res) => {
   try {
-    // Ambil parameter pagination, search, dan status dari query
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const { search, status, id_satker: filter_satker, bidangf: filter_bidang } = req.query;
-    
-    // Ambil level user dari request (req.user.level) - Optimasi: hanya query jika diperlukan
-    const userLevel = req.user.level;
-    let id_skpd;
+    const { search, id_satker: filter_satker, bidangf: filter_bidang } = req.query;
 
-    if (userLevel === '1') {
-      id_skpd = req.query.id_skpd;
-    } else if (userLevel === '2' || userLevel === '3') {
-      // Optimasi: hanya ambil id_skpd tanpa include yang tidak perlu
-      const user = await User.findByPk(req.user.id, {
-        attributes: ['id'],
-        include: [
-          {
-            model: userLevel === '2' ? AdmOpd : AdmUpt,
-            attributes: ['id_skpd']
-          }
-        ]
-      });
-      id_skpd = getSkpdIdByUserLevel(user, userLevel);
-    }
-
-    // Build master data filter condition
-    let masterCondition = {
+    // Build kondisi langsung ke tabel master (mstpegawai)
+    let whereCondition = {
       STATUSAKTIF: 'AKTIF'
     };
 
-    // Apply organizational filters
-    if (id_skpd) masterCondition.KDSKPD = id_skpd;
-    if (filter_satker) masterCondition.KDSATKER = filter_satker;
-    if (filter_bidang) masterCondition.BIDANGF = filter_bidang;
+    if (filter_satker) whereCondition.KDSATKER = filter_satker;
+    if (filter_bidang) whereCondition.BIDANGF = filter_bidang;
 
-    // Add search condition if exists
     if (search) {
-      masterCondition = {
+      whereCondition = {
         [Op.and]: [
-          masterCondition,
+          whereCondition,
           {
             [Op.or]: [
               { NIP: { [Op.like]: `%${search}%` } },
@@ -146,87 +122,42 @@ const getAllUser = async (req, res) => {
       };
     }
 
-    // Optimasi: Gunakan parallel processing untuk count dan data
-    const [masterNips, totalUsers] = await Promise.all([
-      // Ambil NIP yang valid dari master data
-      MstPegawai.findAll({
-        where: masterCondition,
-        attributes: ['NIP'],
-        limit: 1000 // Limit untuk performa
-      }),
-      // Hitung total user yang memiliki NIP valid
-      (async () => {
-        const validNips = await MstPegawai.findAll({
-          where: masterCondition,
-          attributes: ['NIP']
-        });
-        
-        if (validNips.length === 0) return 0;
-        
-        const nipList = validNips.map(p => p.NIP);
-        let userWhere = {
-          username: { [Op.in]: nipList }
-        };
-        if (status !== undefined) {
-          userWhere.status = status;
-        }
-        
-        return User.count({ where: userWhere });
-      })()
-    ]);
-
-    const foundNips = masterNips.map(p => p.NIP);
-    
-    if (foundNips.length === 0) {
-      return res.json({
-        data: [],
-        pagination: {
-          totalItems: 0,
-          totalPages: 0,
-          currentPage: page,
-          itemsPerPage: limit
-        },
-        filter: id_skpd ? { id_skpd } : null,
-        searchQuery: search || null
-      });
-    }
-
-    // Ambil user dengan pagination
-    let userWhere = {
-      username: { [Op.in]: foundNips }
-    };
-    if (status !== undefined) {
-      userWhere.status = status;
-    }
-
-    const userList = await User.findAll({
-      where: userWhere,
-      attributes: { exclude: ["password_hash","refresh_token","fcm_token","device_id","level"] },
+    const { count, rows } = await MstPegawai.findAndCountAll({
+      where: whereCondition,
+      attributes: [
+        ['NIP', 'nip'],
+        ['NAMA', 'nama'],
+        ['KODE_UNIT_KERJA', 'kd_unit_kerja'],
+        ['NM_UNIT_KERJA', 'nm_unit_kerja'],
+        ['KDSATKER', 'kdsatker'],
+        ['BIDANGF', 'bidangf']
+      ],
       limit: limit,
       offset: offset,
-      order: [['id', 'DESC']],
+      order: [['NAMA', 'ASC']],
+      raw: true
     });
 
-    // Optimasi: Map dengan data master menggunakan utility yang sudah dioptimasi
-    const users = await mapUsersWithMasterDataOptimized(userList);
+    // Map ke bentuk data minimal yang dibutuhkan frontend
+    const data = rows.map(row => ({
+      ...row,
+      // Biarkan satker dan bidang name null agar tooltip tetap aman di FE
+      satker: null,
+      bidang: null
+    }));
 
-    const totalPages = Math.ceil(totalUsers / limit);
-
-    // Build filter response
-    let filterResponse = {};
-    if (filter_satker) filterResponse.id_satker = filter_satker;
-    if (filter_bidang) filterResponse.bidangf = filter_bidang;
-
-    // Kirim response dengan informasi pagination
     res.json({
-      data: users,
+      data,
       pagination: {
-        totalItems: totalUsers,
-        totalPages: totalPages,
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
         currentPage: page,
         itemsPerPage: limit
       },
-      filter: Object.keys(filterResponse).length > 0 ? filterResponse : null,
+      filter: (filter_satker || filter_bidang) ? {
+        ...(filter_satker ? { id_satker: filter_satker } : {}),
+        ...(filter_bidang ? { bidangf: filter_bidang } : {})
+      } : null,
       searchQuery: search || null
     });
   } catch (error) {
@@ -240,20 +171,20 @@ const searchUsersOpd = async (req, res) => {
     const { query } = req.query;
     console.log(query,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
     
-    // Ambil user beserta relasi untuk mendapatkan id_skpd
+    // Ambil user beserta relasi untuk mendapatkan id_satker
     const user = await User.findByPk(req.user.id, {
       include: [
         {
           model: AdmOpd,
-          attributes: ['id_skpd']
+          attributes: ['id_satker']
         }
       ]
     });
     
-    const id_skpd = user.AdmOpd?.id_skpd;
+    const id_satker = user.AdmOpd?.id_satker;
     
     // Gunakan utility untuk search dengan master data
-    const usersWithMasterData = await searchUsersWithMasterData(query, id_skpd);
+    const usersWithMasterData = await searchUsersWithMasterData(query, id_satker);
 
     if (usersWithMasterData.length === 0) {
       return res.status(404).json({ error: "User tidak ditemukan" });
@@ -261,7 +192,7 @@ const searchUsersOpd = async (req, res) => {
 
     res.json({
       data: usersWithMasterData,
-      filter: id_skpd ? { id_skpd } : null
+      filter: id_satker ? { id_satker } : null
     });
   } 
   catch (error) {

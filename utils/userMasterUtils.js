@@ -1,6 +1,6 @@
 "use strict";
 
-const { User, MstPegawai, SkpdTbl, SatkerTbl, BidangTbl, AdmOpd, AdmUpt, ViewDaftarUnitKerja } = require("../models");
+const { User, MstPegawai, SatkerTbl, BidangTbl, AdmOpd, AdmUpt, ViewDaftarUnitKerja } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 
@@ -298,7 +298,7 @@ const getUserWithMasterData = async (userId, options = {}) => {
         }
       ],
       attributes: [
-        'NIP', 'NAMA', 'KDSKPD', 'KDSATKER', 'BIDANGF', 'NM_UNIT_KERJA',
+        'NIP', 'NAMA', 'KDSATKER', 'BIDANGF', 'NM_UNIT_KERJA',
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF'
@@ -335,7 +335,6 @@ const getUserWithMasterData = async (userId, options = {}) => {
         // Data master pegawai
         nama: masterData.NAMA,
         nip: masterData.NIP,
-        // kdskpd: masterData.KDSKPD,
         nm_unit_kerja: masterData.NM_UNIT_KERJA,
         kdsatker: masterData.KDSATKER,
         bidangf: masterData.BIDANGF,
@@ -353,13 +352,7 @@ const getUserWithMasterData = async (userId, options = {}) => {
         jenis_pegawai: masterData.JENIS_PEGAWAI,
         status_aktif: masterData.STATUSAKTIF,
         
-        // Data relasi
-        // skpd: masterData.SkpdTbl ? {
-        //   kdskpd: masterData.SkpdTbl.KDSKPD,
-        //   nmskpd: masterData.SkpdTbl.NMSKPD,
-        //   status_skpd: masterData.SkpdTbl.StatusSKPD
-        // } : null,
-        
+    
         satker: satkerData ? {
           kdsatker: satkerData.KDSATKER,
           nmsatker: satkerData.NMSATKER
@@ -393,56 +386,55 @@ const getUserWithMasterData = async (userId, options = {}) => {
 };
 
 /**
- * Mendapatkan id_skpd berdasarkan level user dan data admin
+ * Mendapatkan id_satker berdasarkan level user dan data admin
  * @param {Object} user - Data user dengan relasi AdmOpd/AdmUpt
  * @param {String} userLevel - Level user ('1', '2', '3')
- * @returns {String|null} ID SKPD
+ * @returns {String|null} ID Satker
  */
-const getSkpdIdByUserLevel = (user, userLevel) => {
+const getSatkerIdByUserLevel = (user, userLevel) => {
   try {
     if (userLevel === '2' && user.AdmOpd) {
-      return user.AdmOpd.id_skpd;
+      return user.AdmOpd.id_satker;
     } else if (userLevel === '3' && user.AdmUpt) {
-      return user.AdmUpt.id_skpd;
+      return user.AdmUpt.id_satker;
     }
     return null;
   } catch (error) {
-    console.error('Error getting SKPD ID by user level:', error);
+    console.error('Error getting Satker ID by user level:', error);
     return null;
   }
 };
 
 /**
- * Filter users berdasarkan SKPD
+ * Filter users berdasarkan Satker
  * @param {Array} users - Array data user
- * @param {String} id_skpd - ID SKPD untuk filter
+ * @param {String} id_satker - ID Satker untuk filter
  * @returns {Array} Array data user yang sudah difilter
  */
-const filterUsersBySkpd = (users, id_skpd) => {
-  if (!id_skpd) {
+const filterUsersBySatker = (users, id_satker) => {
+  if (!id_satker) {
     return users;
   }
-  
-  return users.filter(user => user.kdskpd === id_skpd);
+  return users.filter(user => user.kdsatker === id_satker);
 };
 
 /**
  * Search users dengan master data
  * @param {String} query - Query pencarian
- * @param {String} id_skpd - ID SKPD untuk filter (optional)
+ * @param {String} id_satker - ID Satker untuk filter (optional)
  * @param {Object} options - Opsi tambahan termasuk status
  * @returns {Array} Array data user yang sudah digabung dengan data master
  */
-const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) => {
+const searchUsersWithMasterData = async (query, id_satker = null, options = {}) => {
   try {
-    // Jika ada filter SKPD, ambil NIP yang valid terlebih dahulu
+    // Jika ada filter Satker, ambil NIP yang valid terlebih dahulu
     let validNips = null;
-    if (id_skpd) {
-      const pegawaiWithSkpd = await MstPegawai.findAll({
-        where: { KDSKPD: id_skpd },
+    if (id_satker) {
+      const pegawaiWithSatker = await MstPegawai.findAll({
+        where: { KDSATKER: id_satker },
         attributes: ['NIP']
       });
-      validNips = pegawaiWithSkpd.map(p => p.NIP);
+      validNips = pegawaiWithSatker.map(p => p.NIP);
       
       if (validNips.length === 0) {
         return []; // Tidak ada data, return empty array
@@ -457,12 +449,12 @@ const searchUsersWithMasterData = async (query, id_skpd = null, options = {}) =>
       ]
     };
 
-    // Jika ada filter SKPD, tambahkan ke kondisi
-    if (id_skpd) {
+    // Jika ada filter Satker, tambahkan ke kondisi
+    if (id_satker) {
       masterSearchCondition = {
         [Op.and]: [
           masterSearchCondition,
-          { KDSKPD: id_skpd }
+          { KDSATKER: id_satker }
         ]
       };
     }
@@ -514,7 +506,7 @@ module.exports = {
   mapUsersWithMasterData,
   mapUsersWithMasterDataOptimized,
   getUserWithMasterData,
-  getSkpdIdByUserLevel,
-  filterUsersBySkpd,
+  getSatkerIdByUserLevel,
+  filterUsersBySatker,
   searchUsersWithMasterData
 };

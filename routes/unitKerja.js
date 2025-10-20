@@ -8,11 +8,19 @@ const {
   setLocation,
   getLocationHierarchyController,
   getSatkerLocations,
-  activateLocation
+  activateLocation,
+  assignJamDinas,
+  removeJamDinasAssignment,
+  getSatkerOptions,
+  getBidangOptions
 } = require('../controllers/unitKerjaController');
 
 // GET /api/unit-kerja - Mendapatkan semua satker
 router.get('/', getAllSatker);
+router.get('/options', getSatkerOptions);
+router.get('/options/bidang', getBidangOptions);
+
+
 
 // GET /api/unit-kerja/:id-satker - Mendapatkan detail satker beserta bidang-bidangnya
 router.get('/:idSatker', getSatkerDetail);
@@ -46,5 +54,14 @@ router.put('/:idSatker/:idBidang/activate-location', activateLocation);
 
 // PUT /api/unit-kerja/:id-satker/:id-bidang/:id-sub-bidang/activate-location - Mengaktifkan lokasi sub-bidang
 router.put('/:idSatker/:idBidang/:idSubBidang/activate-location', activateLocation);
+
+// POST /api/unit-kerja/:id-satker/jam-dinas - Assign jam dinas untuk satker
+router.post('/:idSatker/jam-dinas', assignJamDinas);
+
+// POST /api/unit-kerja/:id-satker/:id-bidang/jam-dinas - Assign jam dinas untuk bidang
+router.post('/:idSatker/:idBidang/jam-dinas', assignJamDinas);
+
+// DELETE /api/unit-kerja/jam-dinas/:assignmentId - Hapus jam dinas assignment
+router.delete('/jam-dinas/:assignmentId', removeJamDinasAssignment);
 
 module.exports = router;

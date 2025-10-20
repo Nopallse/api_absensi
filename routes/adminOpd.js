@@ -8,6 +8,7 @@ const { getUserById, getAllUser, searchUsersOpd } = require("../controllers/user
 const { getAllKehadiran, getKehadiranByUserId } = require("../controllers/kehadiranController");
 const { getAllResetRequests, updateResetRequestStatus } = require("../controllers/deviceResetController");
 const { exportPresensiHarian, exportPresensiBulanan } = require("../controllers/exportController");
+const { getAllJamDinas, getJamDinasById } = require("../controllers/jamDinasController");
 
 // User management (requires admin OPD level or higher)
 router.get("/users", requireAdminOpd(), getAllUser);
@@ -35,5 +36,9 @@ router.get("/kehadiran/export/bulanan",
   requireAdminOpd(), 
   exportPresensiBulanan
 );
+
+// Jam Dinas routes (requires admin OPD level or higher)
+router.get("/jam-dinas", requireAdminOpd(), getAllJamDinas);
+router.get("/jam-dinas/:id", requireAdminOpd(), getJamDinasById);
 
 module.exports = router; 

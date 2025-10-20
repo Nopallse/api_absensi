@@ -5,47 +5,30 @@ const { Lokasi, SatkerTbl, BidangTbl, BidangSub } = require('../models');
  * Mendapatkan lokasi efektif berdasarkan hierarki (OPTIMIZED)
  * Prioritas: Sub Bidang > Bidang > Satker
  */
-const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = null) => {
+const getEffectiveLocation = async (idSatker, idBidang = null) => {
   try {
-   
-
     let whereConditions = [];
     const usedConditions = [];
 
-    if (idBidang == null && idSubBidang == null) {
-        // Hanya cari lokasi di level satker (termasuk yang status false)
+    if (idBidang == null) {
+      // Hanya cari lokasi di level satker (termasuk yang status false)
       whereConditions.push({
         id_satker: idSatker,
-        id_bidang: null,
-        id_sub_bidang: null
+        id_bidang: null
       });
       usedConditions.push('satker');
     } else {
-      // Tambahkan kondisi sub_bidang jika ada (hanya yang status true)
-      if (idSubBidang && idBidang) {
-        whereConditions.push({
-          id_satker: idSatker,
-          id_bidang: idBidang,
-          id_sub_bidang: idSubBidang,
-          status: true
-        });
-        usedConditions.push('sub_bidang');
-      }
-      // Tambahkan kondisi bidang jika ada (hanya yang status true)
-      if (idBidang) {
-        whereConditions.push({
-          id_satker: idSatker,
-          id_bidang: idBidang,
-          id_sub_bidang: null,
-          status: true
-        });
-        usedConditions.push('bidang');
-      }
-      // Selalu tambahkan kondisi satker sebagai fallback (hanya yang status true)
+      // Kondisi bidang (hanya yang status true)
+      whereConditions.push({
+        id_satker: idSatker,
+        id_bidang: idBidang,
+        status: true
+      });
+      usedConditions.push('bidang');
+      // Fallback satker (hanya yang status true)
       whereConditions.push({
         id_satker: idSatker,
         id_bidang: null,
-        id_sub_bidang: null,
         status: true
       });
       usedConditions.push('satker');
@@ -53,32 +36,22 @@ const getEffectiveLocation = async (idSatker, idBidang = null, idSubBidang = nul
 
     console.log('[getEffectiveLocation] Kondisi lokasi yang dicek:', usedConditions);
 
-    // Query dengan OR condition dan order by prioritas
+    // Query dengan OR condition dan order by prioritas (bidang > satker)
     const locations = await Lokasi.findAll({
       where: {
         [require('sequelize').Op.or]: whereConditions
       },
       order: [
-        // Prioritas: sub_bidang > bidang > satker
-        [require('sequelize').literal('CASE WHEN id_sub_bidang IS NOT NULL THEN 1 WHEN id_bidang IS NOT NULL THEN 2 ELSE 3 END'), 'ASC']
+        // Prioritas: bidang > satker
+        [require('sequelize').literal('CASE WHEN id_bidang IS NOT NULL THEN 1 ELSE 2 END'), 'ASC']
       ],
       limit: 1
     });
 
     if (locations.length > 0) {
       const location = locations[0];
-      let level, source;
-
-      if (location.id_sub_bidang) {
-        level = 'sub_bidang';
-        source = 'sub_bidang';
-      } else if (location.id_bidang) {
-        level = 'bidang';
-        source = 'bidang';
-      } else {
-        level = 'satker';
-        source = 'satker';
-      }
+      const level = location.id_bidang ? 'bidang' : 'satker';
+      const source = level;
       console.log('lokasi', location.toJSON());
       console.log('level', level);
       console.log('source', source);
@@ -114,7 +87,6 @@ const createOrUpdateLocation = async (locationData) => {
       where: {
         id_satker: idSatker,
         id_bidang: idBidang || null,
-        id_sub_bidang: idSubBidang || null
       }
     });
 
@@ -154,7 +126,6 @@ const createOrUpdateLocation = async (locationData) => {
       level_unit_kerja: levelUnitKerja,
       id_satker: idSatker,
       id_bidang: idBidang || null,
-      id_sub_bidang: idSubBidang || null,
       lat,
       lng,
       range: range || 100,
@@ -194,7 +165,6 @@ const getLocationsBySatker = async (idSatker) => {
       ],
       order: [
         ['id_bidang', 'ASC'],
-        ['id_sub_bidang', 'ASC']
       ]
     });
 
@@ -237,7 +207,6 @@ const getLocationHierarchy = async (idSatker) => {
       where: {
         id_satker: idSatker,
         id_bidang: null,
-        id_sub_bidang: null,
         status: true
       }
     });
@@ -259,7 +228,6 @@ const getLocationHierarchy = async (idSatker) => {
         where: {
           id_satker: idSatker,
           id_bidang: bidang.BIDANGF,
-          id_sub_bidang: null,
           status: true
         }
       });
@@ -288,7 +256,6 @@ const getLocationHierarchy = async (idSatker) => {
           where: {
             id_satker: idSatker,
             id_bidang: bidang.BIDANGF,
-            id_sub_bidang: subBidang.SUBF,
             status: true
           }
         });

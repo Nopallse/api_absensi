@@ -29,12 +29,7 @@ module.exports = (sequelize, DataTypes) => {
         as: 'bidang'
       });
 
-      // Relasi dengan sub bidang (Level 3)
-      Lokasi.belongsTo(models.BidangSub, {
-        foreignKey: 'id_sub_bidang',
-        targetKey: 'SUBF',
-        as: 'subBidang'
-      });
+     
     }
   }
 
@@ -68,11 +63,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
         comment: 'ID bidang (Level 2) - opsional, jika diisi maka lokasi khusus untuk bidang'
-      },
-      id_sub_bidang: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        comment: 'ID sub bidang (Level 3) - opsional, jika diisi maka lokasi khusus untuk sub bidang'
       },
       ket: {
         type: DataTypes.STRING,

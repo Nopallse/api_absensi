@@ -1,5 +1,6 @@
 const { SatkerTbl, BidangTbl, BidangSub } = require('../models');
 const { getEffectiveLocation, getLocationHierarchy, createOrUpdateLocation, getLocationsBySatker } = require('../utils/lokasiHierarchyUtils');
+const { getEffectiveJamDinas, createOrUpdateJamDinasAssignment, deleteJamDinasAssignment } = require('../utils/jamDinasHierarchyUtils');
 
 /**
  * Mendapatkan semua satker (Level 1)
@@ -66,6 +67,66 @@ const getAllSatker = async (req, res) => {
   }
 };
 
+const getSatkerOptions = async (req, res) => {
+  try {
+    const { search, page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    let whereCondition = { STATUS_SATKER: '1' };
+
+    // Tambahkan search jika ada
+    if (search) {
+      whereCondition[require('sequelize').Op.or] = [
+        { KDSATKER: { [require('sequelize').Op.like]: `%${search}%` } },
+        { NMSATKER: { [require('sequelize').Op.like]: `%${search}%` } }
+      ];
+    }
+
+    const { count, rows: satkerList } = await SatkerTbl.findAndCountAll({
+      where: whereCondition,
+      attributes: ['KDSATKER', 'NMSATKER']
+    });
+
+    res.json({ data: satkerList, pagination: { totalItems: count, totalPages: Math.ceil(count / limit), currentPage: parseInt(page), itemsPerPage: parseInt(limit) } });
+  } catch (error) {
+    console.error('GetSatkerOptions Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getBidangOptions = async (req, res) => {
+  try {
+    const { search, satker, page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+
+    let whereCondition = {
+      KDSATKER: satker,
+      STATUS_BIDANG: '1'
+    };
+
+    const { count, rows: bidangList } = await BidangTbl.findAndCountAll({
+      where: whereCondition,
+      attributes: ['BIDANGF', 'NMBIDANG'],
+      order: [['NMBIDANG', 'ASC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+    
+    if (search) {
+      bidangWhereCondition[require('sequelize').Op.or] = [
+        { BIDANGF: { [require('sequelize').Op.like]: `%${search}%` } },
+        { NMBIDANG: { [require('sequelize').Op.like]: `%${search}%` } }
+      ];
+    }
+
+    res.json({ data: bidangList, pagination: { totalItems: count, totalPages: Math.ceil(count / limit), currentPage: parseInt(page), itemsPerPage: parseInt(limit) } });
+
+  } catch (error) {
+    console.error('GetBidangOptions Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 /**
  * Mendapatkan detail satker beserta bidang-bidangnya
  */
@@ -87,6 +148,9 @@ const getSatkerDetail = async (req, res) => {
     if (!satker) {
       return res.status(404).json({ error: "Satker tidak ditemukan" });
     }
+
+    // Ambil jam dinas yang efektif untuk satker ini
+    const jamDinasAssignments = await getEffectiveJamDinas(idSatker);
 
     // Ambil bidang-bidang di satker ini
     let bidangWhereCondition = { 
@@ -149,6 +213,7 @@ const getSatkerDetail = async (req, res) => {
           itemsPerPage: parseInt(limit)
         }
       },
+      jamDinas: jamDinasAssignments,
       searchQuery: search || null
     });
   } catch (error) {
@@ -236,19 +301,51 @@ const getBidangDetail = async (req, res) => {
 
     const totalPages = Math.ceil(count / limit);
 
-    // Ambil lokasi yang efektif untuk bidang ini
-    const bidangLocation = await getEffectiveLocation(idSatker, idBidang);
+    // Ambil lokasi khusus level bidang (termasuk yang status false)
+    const { Lokasi } = require('../models');
+    const bidangLocation = await Lokasi.findOne({
+      where: {
+        id_satker: idSatker,
+        id_bidang: idBidang
+      },
+      order: [
+        ['status', 'DESC'], // utamakan yang aktif jika ada
+        ['updatedAt', 'DESC']
+      ]
+    });
+
+    // Ambil lokasi satker
+    const satkerLocation = await getEffectiveLocation(idSatker);
+
+    // Susun daftar lokasi yang relevan untuk bidang: satker (aktif) + bidang (bisa aktif/non-aktif)
+    const bidangLokasiList = [];
+    if (satkerLocation) {
+      bidangLokasiList.push(satkerLocation);
+    }
+    if (bidangLocation) {
+      const lokasiObj = bidangLocation.toJSON();
+      bidangLokasiList.push({
+        ...lokasiObj,
+        level: 'bidang',
+        source: 'bidang'
+      });
+    }
+
+    // Ambil jam dinas yang efektif untuk bidang ini
+    const jamDinasAssignments = await getEffectiveJamDinas(idSatker, idBidang);
 
     res.json({
       satker: {
         ...satker.toJSON(),
-        lokasi: await getEffectiveLocation(idSatker) // Lokasi satker
+        lokasi: satkerLocation // Lokasi satker
       },
       bidang: {
         ...bidang.toJSON(),
         totalSubBidangCount,
-        lokasi: bidangLocation
+        lokasi: bidangLocation ? bidangLocation.toJSON() : null,
+        lokasi_list: bidangLokasiList
       },
+      jamDinas: jamDinasAssignments,
       subBidang: {
         data: subBidangWithLocations,
         pagination: {
@@ -317,6 +414,9 @@ const getSubBidangDetail = async (req, res) => {
     // Ambil lokasi yang efektif untuk sub-bidang ini
     const subBidangLocation = await getEffectiveLocation(idSatker, idBidang, idSubBidang);
 
+    // Ambil jam dinas yang efektif untuk sub-bidang ini (inherit dari bidang/satker)
+    const jamDinasAssignments = await getEffectiveJamDinas(idSatker, idBidang);
+
     res.json({
       satker: {
         ...satker.toJSON(),
@@ -329,7 +429,8 @@ const getSubBidangDetail = async (req, res) => {
       subBidang: {
         ...subBidang.toJSON(),
         lokasi: subBidangLocation
-      }
+      },
+      jamDinas: jamDinasAssignments
     });
   } catch (error) {
     console.error('GetSubBidangDetail Error:', error);
@@ -414,7 +515,7 @@ const getSatkerLocations = async (req, res) => {
  */
 const activateLocation = async (req, res) => {
   try {
-    const { idSatker, idBidang, idSubBidang } = req.params;
+    const { idSatker, idBidang } = req.params;
 
     // Cari lokasi yang non-aktif berdasarkan level
     let whereCondition = {
@@ -422,15 +523,10 @@ const activateLocation = async (req, res) => {
       status: false
     };
 
-    if (idSubBidang) {
+    if (idBidang) {
       whereCondition.id_bidang = idBidang;
-      whereCondition.id_sub_bidang = idSubBidang;
-    } else if (idBidang) {
-      whereCondition.id_bidang = idBidang;
-      whereCondition.id_sub_bidang = null;
     } else {
       whereCondition.id_bidang = null;
-      whereCondition.id_sub_bidang = null;
     }
 
     const { Lokasi } = require('../models');
@@ -465,6 +561,57 @@ const activateLocation = async (req, res) => {
   }
 };
 
+/**
+ * Assign atau update jam dinas untuk satker/bidang
+ */
+const assignJamDinas = async (req, res) => {
+  try {
+    const { idSatker, idBidang } = req.params;
+    const { idJamDinas } = req.body;
+
+    // Validasi input
+    if (!idJamDinas) {
+      return res.status(400).json({ 
+        error: 'ID Jam Dinas wajib diisi' 
+      });
+    }
+
+    const assignmentData = {
+      idSatker,
+      idBidang: idBidang || null,
+      idJamDinas: parseInt(idJamDinas),
+      assignmentName: null, // Akan otomatis diisi di utility
+      status: 1
+    };
+
+    const assignment = await createOrUpdateJamDinasAssignment(assignmentData);
+
+    res.json({
+      message: 'Jam dinas berhasil diassign',
+      data: assignment
+    });
+  } catch (error) {
+    console.error('AssignJamDinas Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Hapus jam dinas assignment
+ */
+const removeJamDinasAssignment = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+
+    const result = await deleteJamDinasAssignment(assignmentId);
+
+    res.json(result);
+  } catch (error) {
+    console.error('RemoveJamDinasAssignment Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 module.exports = {
   getAllSatker,
   getSatkerDetail,
@@ -473,5 +620,9 @@ module.exports = {
   setLocation,
   getLocationHierarchyController,
   getSatkerLocations,
-  activateLocation
+  activateLocation,
+  assignJamDinas,
+  removeJamDinasAssignment,
+  getSatkerOptions,
+  getBidangOptions
 };

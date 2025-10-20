@@ -590,33 +590,24 @@ const getAllKehadiran = async (req, res) => {
         const offset = (page - 1) * limit;
 
         // Ambil parameter filter/search
-        const { search, startDate, endDate, lokasi_id, status } = req.query;
+        const { search, startDate, satker, bidang, status } = req.query;
 
+        console.log(startDate);
         // Build where clause untuk Kehadiran
         let whereClause = {};
 
         // Filter by tanggal
-        if (startDate && endDate) {
+        if (startDate) {
+            // Gunakan rentang tanggal untuk pencocokan yang lebih akurat
+            const nextDay = new Date(startDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const nextDayStr = nextDay.toISOString().split('T')[0];
+            
             whereClause.absen_tgl = {
-                [Op.between]: [startDate, endDate]
-            };
-        } else if (startDate) {
-            whereClause.absen_tgl = {
-                [Op.gte]: startDate
-            };
-        } else if (endDate) {
-            whereClause.absen_tgl = {
-                [Op.lte]: endDate
+                [Op.gte]: startDate,
+                [Op.lt]: nextDayStr
             };
         }
-
-        // Filter by lokasi
-        if (lokasi_id) {
-            whereClause.lokasi_id = lokasi_id;
-        }
-
-        // Filter by status (status di sini adalah antara kolom absen_apel dan absen_sore)
-        // status bisa berupa nilai yang valid untuk absen_apel ('HAP', 'TAP') atau absen_sore ('HAS', 'CP')
         if (status) {
             // Cek apakah status termasuk ke dalam absen_apel
             const apelStatus = ['HAP', 'TAP'];
@@ -669,11 +660,6 @@ const getAllKehadiran = async (req, res) => {
                     where: Object.keys(userWhere).length > 0 ? userWhere : undefined,
                     required: false
                 },
-                {
-                    model: Lokasi,
-                    attributes: ['lat', 'lng', 'ket'],
-                    required: false
-                }
             ],
             order: [
                 ['absen_tgl', 'DESC']
@@ -682,93 +668,51 @@ const getAllKehadiran = async (req, res) => {
             limit,
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
-
+        console.log(kehadiran);
         // Enrich kehadiran data with master employee data - Optimized
-        const enrichedKehadiran = await Promise.all(kehadiran.map(async (item) => {
+        let enrichedKehadiran = await Promise.all(kehadiran.map(async (item) => {
             const kehadiranData = item.toJSON();
             
             // Get employee data from master database using utility
             const pegawaiData = await getPegawaiByNip(kehadiranData.absen_nip);
             
-            // Get organizational data
-            let satkerData = null;
-            let bidangData = null;
-            let subBidangData = null;
-            let namaUnitKerja = null;
+           
 
-            if (pegawaiData) {
-                // Get Satker data
-                if (pegawaiData.KDSATKER) {
-                    const satker = await SatkerTbl.findByPk(pegawaiData.KDSATKER, {
-                        attributes: ['KDSATKER', 'NMSATKER']
-                    });
-                    if (satker) {
-                        satkerData = {
-                            kdsatker: satker.KDSATKER,
-                            nmsatker: satker.NMSATKER
-                        };
-                    }
-                }
-
-                // Get Bidang data
-                if (pegawaiData.BIDANGF) {
-                    const bidang = await BidangTbl.findByPk(pegawaiData.BIDANGF, {
-                        attributes: ['BIDANGF', 'NMBIDANG']
-                    });
-                    if (bidang) {
-                        bidangData = {
-                            bidangf: bidang.BIDANGF,
-                            nmbidang: bidang.NMBIDANG
-                        };
-                    }
-                }
-
-                // Get Sub Bidang data
-                if (pegawaiData.SUBF) {
-                    const subBidang = await BidangSub.findByPk(pegawaiData.SUBF, {
-                        attributes: ['SUBF', 'NMSUB']
-                    });
-                    if (subBidang) {
-                        subBidangData = {
-                            subf: subBidang.SUBF,
-                            nmsub: subBidang.NMSUB
-                        };
-                    }
-                }
-
-                // Determine nama unit kerja based on hierarchy
-                if (subBidangData) {
-                    namaUnitKerja = subBidangData.nmsub;
-                } else if (bidangData) {
-                    namaUnitKerja = bidangData.nmbidang;
-                } else if (satkerData) {
-                    namaUnitKerja = satkerData.nmsatker;
-                } else {
-                    namaUnitKerja = pegawaiData.NM_UNIT_KERJA || null;
-                }
-            }
             
             return {
                 pegawai: {
                     nip: pegawaiData?.NIP || null,
-                    nama: pegawaiData?.NAMA || null
+                    nama: pegawaiData?.NAMA || null,
+                    kdsatker: pegawaiData?.KDSATKER || null,
+                    bidangf: pegawaiData?.BIDANGF || null,
+                    subf: pegawaiData?.SUBF || null,
+                    nm_unit_kerja: pegawaiData?.NM_UNIT_KERJA || null,
                 },
                 absen_checkin: kehadiranData.absen_checkin,
                 absen_checkout: kehadiranData.absen_checkout,
                 absen_apel: kehadiranData.absen_apel,
                 absen_sore: kehadiranData.absen_sore,
-                nama_unit_kerja: namaUnitKerja,
-                satker: satkerData,
-                bidang: bidangData,
-                sub_bidang: subBidangData,
-                lokasi: kehadiranData.Lokasi ? {
-                    lokasi_id: kehadiranData.lokasi_id,
-                    lat: kehadiranData.Lokasi.lat,
-                    lng: kehadiranData.Lokasi.lng,
-                    ket: kehadiranData.Lokasi.ket
-                } : null
+                absen_tgl: kehadiranData.absen_tgl,
             };
         }));
+
+        // Apply satker dan bidang filter setelah enrich data
+        if (satker || bidang) {
+            enrichedKehadiran = enrichedKehadiran.filter(item => {
+                let matchSatker = true;
+                let matchBidang = true;
+                
+                if (satker) {
+                    matchSatker = item.pegawai.kdsatker === satker;
+                }
+                
+                if (bidang) {
+                    matchBidang = item.pegawai.bidangf === bidang;
+                }
+                
+                return matchSatker && matchBidang;
+            });
+        }
 
         res.status(200).json({
             success: true,
@@ -1175,7 +1119,8 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
         const { 
             year = new Date().getFullYear(), 
             month = new Date().getMonth() + 1,
-            lokasi_id,
+            satker,
+            bidang,
             user_id,
             page = 1,
             limit = 10
@@ -1207,15 +1152,13 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             }
         };
 
-        // Add location filter if provided
-        if (lokasi_id) {
-            whereClause.lokasi_id = lokasi_id;
-        }
-
         // Add user filter if provided
         if (user_id) {
             whereClause.absen_nip = user_id;
         }
+
+        // Note: satker dan bidang filter akan diterapkan setelah enrich data
+        // karena filter ini memerlukan data master pegawai
 
         // Get attendance data with pagination
         const { count, rows: attendances } = await Kehadiran.findAndCountAll({
@@ -1239,47 +1182,114 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
 
+        // Enrich attendance data with master employee data and apply satker/bidang filter
+        let enrichedAttendances = await Promise.all(attendances.map(async (item) => {
+            const attendanceData = item.toJSON();
+            
+            // Get employee data from master database using utility
+            const pegawaiData = await getPegawaiByNip(attendanceData.absen_nip);
+            
+            // Get organizational data
+            let satkerData = null;
+            let bidangData = null;
+            let subBidangData = null;
+            let namaUnitKerja = null;
+
+            if (pegawaiData) {
+                // Get Satker data
+                if (pegawaiData.KDSATKER) {
+                    const satker = await SatkerTbl.findByPk(pegawaiData.KDSATKER, {
+                        attributes: ['KDSATKER', 'NMSATKER']
+                    });
+                    if (satker) {
+                        satkerData = {
+                            kdsatker: satker.KDSATKER,
+                            nmsatker: satker.NMSATKER
+                        };
+                    }
+                }
+
+                // Get Bidang data
+                if (pegawaiData.BIDANGF) {
+                    const bidang = await BidangTbl.findByPk(pegawaiData.BIDANGF, {
+                        attributes: ['BIDANGF', 'NMBIDANG']
+                    });
+                    if (bidang) {
+                        bidangData = {
+                            bidangf: bidang.BIDANGF,
+                            nmbidang: bidang.NMBIDANG
+                        };
+                    }
+                }
+
+                // Get Sub Bidang data
+                if (pegawaiData.SUBF) {
+                    const subBidang = await BidangSub.findByPk(pegawaiData.SUBF, {
+                        attributes: ['SUBF', 'NMSUB']
+                    });
+                    if (subBidang) {
+                        subBidangData = {
+                            subf: subBidang.SUBF,
+                            nmsub: subBidang.NMSUB
+                        };
+                    }
+                }
+
+                // Determine nama unit kerja based on hierarchy
+                if (subBidangData) {
+                    namaUnitKerja = subBidangData.nmsub;
+                } else if (bidangData) {
+                    namaUnitKerja = bidangData.nmbidang;
+                } else if (satkerData) {
+                    namaUnitKerja = satkerData.nmsatker;
+                } else {
+                    namaUnitKerja = pegawaiData.NM_UNIT_KERJA || null;
+                }
+            }
+            
+            return {
+                pegawai: {
+                    nip: pegawaiData?.NIP || null,
+                    nama: pegawaiData?.NAMA || null
+                },
+                absen_checkin: attendanceData.absen_checkin,
+                absen_checkout: attendanceData.absen_checkout,
+                absen_apel: attendanceData.absen_apel,
+                absen_sore: attendanceData.absen_sore,
+                nama_unit_kerja: namaUnitKerja,
+                satker: satkerData,
+                bidang: bidangData,
+                sub_bidang: subBidangData,
+                lokasi: attendanceData.Lokasi ? {
+                    lokasi_id: attendanceData.lokasi_id,
+                    lat: attendanceData.Lokasi.lat,
+                    lng: attendanceData.Lokasi.lng,
+                    ket: attendanceData.Lokasi.ket
+                } : null
+            };
+        }));
+
+        // Apply satker dan bidang filter setelah enrich data
+        if (satker || bidang) {
+            enrichedAttendances = enrichedAttendances.filter(item => {
+                let matchSatker = true;
+                let matchBidang = true;
+                
+                if (satker) {
+                    matchSatker = item.satker && item.satker.kdsatker === satker;
+                }
+                
+                if (bidang) {
+                    matchBidang = item.bidang && item.bidang.bidangf === bidang;
+                }
+                
+                return matchSatker && matchBidang;
+            });
+        }
+
         // Get summary statistics for the month berdasarkan model kehadiran
-        const summaryStats = await Kehadiran.findAll({
-            where: whereClause,
-            attributes: [
-                'absen_kat',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_kat']
-        });
-
-        // Get apel statistics (absen_apel)
-        const apelStats = await Kehadiran.findAll({
-            where: {
-                ...whereClause,
-                absen_apel: {
-                    [Op.not]: null
-                }
-            },
-            attributes: [
-                'absen_apel',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_apel']
-        });
-
-        // Get sore statistics (absen_sore)
-        const soreStats = await Kehadiran.findAll({
-            where: {
-                ...whereClause,
-                absen_sore: {
-                    [Op.not]: null
-                }
-            },
-            attributes: [
-                'absen_sore',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_sore']
-        });
-
-        // Process summary statistics berdasarkan model kehadiran
+        // Karena kita sudah menerapkan filter satker/bidang pada enrichedAttendances,
+        // kita perlu menghitung ulang statistics berdasarkan data yang sudah difilter
         const stats = {
             total: 0,
             HADIR: 0,
@@ -1291,91 +1301,39 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             CP: 0    // Cepat Pulang
         };
 
-        // Process absen_kat statistics
-        summaryStats.forEach(stat => {
-            const category = stat.absen_kat;
-            const count = parseInt(stat.dataValues.count);
-            stats.total += count;
+        // Calculate statistics from enriched and filtered data
+        enrichedAttendances.forEach(item => {
+            stats.total += 1;
             
-            if (stats.hasOwnProperty(category)) {
-                stats[category] = count;
+            // Count based on absen_apel
+            if (item.absen_apel === 'HAP') {
+                stats.HAP += 1;
+            } else if (item.absen_apel === 'TAP') {
+                stats.TAP += 1;
             }
-        });
-
-        // Process absen_apel statistics
-        apelStats.forEach(stat => {
-            const apelStatus = stat.absen_apel;
-            const count = parseInt(stat.dataValues.count);
             
-            if (stats.hasOwnProperty(apelStatus)) {
-                stats[apelStatus] = count;
+            // Count based on absen_sore
+            if (item.absen_sore === 'HAS') {
+                stats.HAS += 1;
+            } else if (item.absen_sore === 'CP') {
+                stats.CP += 1;
             }
-        });
-
-        // Process absen_sore statistics
-        soreStats.forEach(stat => {
-            const soreStatus = stat.absen_sore;
-            const count = parseInt(stat.dataValues.count);
             
-            if (stats.hasOwnProperty(soreStatus)) {
-                stats[soreStatus] = count;
-            }
+            // Count HADIR (any attendance record)
+            stats.HADIR += 1;
         });
 
-        // Get daily breakdown berdasarkan model kehadiran
-        const dailyStats = await Kehadiran.findAll({
-            where: whereClause,
-            attributes: [
-                'absen_tgl',
-                'absen_kat',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_tgl', 'absen_kat'],
-            order: [['absen_tgl', 'ASC']]
-        });
-
-        // Get daily apel breakdown
-        const dailyApelStats = await Kehadiran.findAll({
-            where: {
-                ...whereClause,
-                absen_apel: {
-                    [Op.not]: null
-                }
-            },
-            attributes: [
-                'absen_tgl',
-                'absen_apel',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_tgl', 'absen_apel'],
-            order: [['absen_tgl', 'ASC']]
-        });
-
-        // Get daily sore breakdown
-        const dailySoreStats = await Kehadiran.findAll({
-            where: {
-                ...whereClause,
-                absen_sore: {
-                    [Op.not]: null
-                }
-            },
-            attributes: [
-                'absen_tgl',
-                'absen_sore',
-                [Sequelize.fn('COUNT', Sequelize.col('absen_id')), 'count']
-            ],
-            group: ['absen_tgl', 'absen_sore'],
-            order: [['absen_tgl', 'ASC']]
-        });
-
-        // Process daily statistics berdasarkan model kehadiran
+        // Get daily breakdown berdasarkan data yang sudah difilter
         const dailyBreakdown = {};
         
-        // Process absen_kat statistics
-        dailyStats.forEach(stat => {
-            const date = stat.absen_tgl;
-            const category = stat.absen_kat;
-            const count = parseInt(stat.dataValues.count);
+        // Process enriched and filtered data for daily breakdown
+        enrichedAttendances.forEach(item => {
+            // We need to get the date from the original attendance data
+            // Since we don't have absen_tgl in enriched data, we need to get it from original data
+            const originalAttendance = attendances.find(att => att.absen_nip === item.pegawai.nip);
+            if (!originalAttendance) return;
+            
+            const date = originalAttendance.absen_tgl;
             
             if (!dailyBreakdown[date]) {
                 dailyBreakdown[date] = {
@@ -1391,62 +1349,27 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
                 };
             }
             
-            if (dailyBreakdown[date].hasOwnProperty(category)) {
-                dailyBreakdown[date][category] = count;
-            }
-            dailyBreakdown[date].total += count;
-        });
-
-        // Process absen_apel statistics
-        dailyApelStats.forEach(stat => {
-            const date = stat.absen_tgl;
-            const apelStatus = stat.absen_apel;
-            const count = parseInt(stat.dataValues.count);
-            
-            if (!dailyBreakdown[date]) {
-                dailyBreakdown[date] = {
-                    date,
-                    HADIR: 0,
-                    HAP: 0,
-                    TAP: 0,
-                    HAS: 0,
-                    CP: 0,
-                    total: 0
-                };
+            // Count based on absen_apel
+            if (item.absen_apel === 'HAP') {
+                dailyBreakdown[date].HAP += 1;
+            } else if (item.absen_apel === 'TAP') {
+                dailyBreakdown[date].TAP += 1;
             }
             
-            if (dailyBreakdown[date].hasOwnProperty(apelStatus)) {
-                dailyBreakdown[date][apelStatus] = count;
-            }
-        });
-
-        // Process absen_sore statistics
-        dailySoreStats.forEach(stat => {
-            const date = stat.absen_tgl;
-            const soreStatus = stat.absen_sore;
-            const count = parseInt(stat.dataValues.count);
-            
-            if (!dailyBreakdown[date]) {
-                dailyBreakdown[date] = {
-                    date,
-                    HADIR: 0,
-                    HAP: 0,
-                    TAP: 0,
-                    HAS: 0,
-                    CP: 0,
-                    total: 0
-                };
+            // Count based on absen_sore
+            if (item.absen_sore === 'HAS') {
+                dailyBreakdown[date].HAS += 1;
+            } else if (item.absen_sore === 'CP') {
+                dailyBreakdown[date].CP += 1;
             }
             
-            if (dailyBreakdown[date].hasOwnProperty(soreStatus)) {
-                dailyBreakdown[date][soreStatus] = count;
-            }
+            // Count HADIR (any attendance record)
+            dailyBreakdown[date].HADIR += 1;
+            dailyBreakdown[date].total += 1;
         });
 
         // Convert daily breakdown to array and sort by date
         const dailyBreakdownArray = Object.values(dailyBreakdown).sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    
 
         res.status(200).json({
             success: true,
@@ -1458,8 +1381,8 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
                 dailyBreakdown: dailyBreakdownArray,
                 pagination: {
                     currentPage: parseInt(page),
-                    totalPages: Math.ceil(count / parseInt(limit)),
-                    totalItems: count,
+                    totalPages: Math.ceil(enrichedAttendances.length / parseInt(limit)),
+                    totalItems: enrichedAttendances.length,
                     itemsPerPage: parseInt(limit)
                 }
             }
