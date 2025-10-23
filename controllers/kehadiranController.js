@@ -592,7 +592,28 @@ const getAllKehadiran = async (req, res) => {
         // Ambil parameter filter/search
         const { search, startDate, satker, bidang, status } = req.query;
 
-        console.log(startDate);
+        // Auto-filter berdasarkan level admin
+        let autoFilterSatker = null;
+        let autoFilterBidang = null;
+
+        // Level 2 = Admin OPD - filter berdasarkan satker
+        if (req.user.level === '2' && req.adminOpd) {
+            autoFilterSatker = req.adminOpd.id_satker;
+            console.log(`Auto-filter Admin OPD: satker=${autoFilterSatker}`);
+        }
+        
+        // Level 3 = Admin UPT - filter berdasarkan satker dan bidang
+        if (req.user.level === '3' && req.adminUpt) {
+            autoFilterSatker = req.adminUpt.id_satker;
+            autoFilterBidang = req.adminUpt.id_bidang;
+            console.log(`Auto-filter Admin UPT: satker=${autoFilterSatker}, bidang=${autoFilterBidang}`);
+        }
+        
+        // Level 1 = Superadmin - tidak ada auto-filter
+        if (req.user.level === '1') {
+            console.log('Superadmin - tidak ada auto-filter');
+        }
+
         // Build where clause untuk Kehadiran
         let whereClause = {};
 
@@ -697,17 +718,21 @@ const getAllKehadiran = async (req, res) => {
         }));
 
         // Apply satker dan bidang filter setelah enrich data
-        if (satker || bidang) {
+        // Gunakan auto-filter jika tersedia, atau filter dari query parameter
+        const finalSatker = autoFilterSatker || satker;
+        const finalBidang = autoFilterBidang || bidang;
+        
+        if (finalSatker || finalBidang) {
             enrichedKehadiran = enrichedKehadiran.filter(item => {
                 let matchSatker = true;
                 let matchBidang = true;
                 
-                if (satker) {
-                    matchSatker = item.pegawai.kdsatker === satker;
+                if (finalSatker) {
+                    matchSatker = item.pegawai.kdsatker === finalSatker;
                 }
                 
-                if (bidang) {
-                    matchBidang = item.pegawai.bidangf === bidang;
+                if (finalBidang) {
+                    matchBidang = item.pegawai.bidangf === finalBidang;
                 }
                 
                 return matchSatker && matchBidang;
@@ -1114,8 +1139,6 @@ const getLokasiAbsenBerdasarkanJadwal = async (userNip) => {
 // Get monthly attendance with filters (admin only)
 const getMonthlyAttendanceByFilter = async (req, res) => {
     try {
-
-
         const { 
             year = new Date().getFullYear(), 
             month = new Date().getMonth() + 1,
@@ -1127,6 +1150,28 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
         } = req.query;
 
         const offset = (parseInt(page) - 1) * parseInt(limit);
+
+        // Auto-filter berdasarkan level admin
+        let autoFilterSatker = null;
+        let autoFilterBidang = null;
+
+        // Level 2 = Admin OPD - filter berdasarkan satker
+        if (req.user.level === '2' && req.adminOpd) {
+            autoFilterSatker = req.adminOpd.id_satker;
+            console.log(`Auto-filter Admin OPD (Monthly): satker=${autoFilterSatker}`);
+        }
+        
+        // Level 3 = Admin UPT - filter berdasarkan satker dan bidang
+        if (req.user.level === '3' && req.adminUpt) {
+            autoFilterSatker = req.adminUpt.id_satker;
+            autoFilterBidang = req.adminUpt.id_bidang;
+            console.log(`Auto-filter Admin UPT (Monthly): satker=${autoFilterSatker}, bidang=${autoFilterBidang}`);
+        }
+        
+        // Level 1 = Superadmin - tidak ada auto-filter
+        if (req.user.level === '1') {
+            console.log('Superadmin (Monthly) - tidak ada auto-filter');
+        }
 
         // Validate year and month
         const selectedYear = parseInt(year);
@@ -1270,17 +1315,21 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
         }));
 
         // Apply satker dan bidang filter setelah enrich data
-        if (satker || bidang) {
+        // Gunakan auto-filter jika tersedia, atau filter dari query parameter
+        const finalSatker = autoFilterSatker || satker;
+        const finalBidang = autoFilterBidang || bidang;
+        
+        if (finalSatker || finalBidang) {
             enrichedAttendances = enrichedAttendances.filter(item => {
                 let matchSatker = true;
                 let matchBidang = true;
                 
-                if (satker) {
-                    matchSatker = item.satker && item.satker.kdsatker === satker;
+                if (finalSatker) {
+                    matchSatker = item.satker && item.satker.kdsatker === finalSatker;
                 }
                 
-                if (bidang) {
-                    matchBidang = item.bidang && item.bidang.bidangf === bidang;
+                if (finalBidang) {
+                    matchBidang = item.bidang && item.bidang.bidangf === finalBidang;
                 }
                 
                 return matchSatker && matchBidang;

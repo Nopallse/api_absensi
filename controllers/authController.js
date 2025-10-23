@@ -2,7 +2,7 @@ require("dotenv").config();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { generateTokens, verifyRefreshToken } = require("../utils/jwtUtils");
-const { User, AdmOpd, AdmUpt } = require("../models/index");
+const { User, AdmOpd, AdmUpt, DeviceResetRequest } = require("../models/index");
 const { SkpdTbl, SatkerTbl, BidangTbl } = require("../models/index");
 const { Op } = require("sequelize");
 
@@ -538,4 +538,54 @@ const forceLogoutUser = async (req, res) => {
   }
 };
 
-module.exports = { register, login, loginAdmin, refreshToken, logout, logoutAll, forceLogoutUser };
+const checkResetRequest = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ error: "Username dan password harus diisi" });
+    }
+    
+    // Find user
+    const user = await User.findOne({ 
+      where: { username }
+    });
+    
+    if (!user) {
+      return res.status(401).json({ error: "Username atau password salah" });
+    }
+    
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Username atau password salah" });
+    }
+    
+    // Get reset requests for this user
+    const requests = await DeviceResetRequest.findAll({
+      where: { user_id: user.id },
+      order: [['created_at', 'DESC']],
+      attributes: ['id', 'reason', 'status', 'admin_response', 'created_at', 'approved_at'],
+      include: [
+        {
+          model: User,
+          as: 'admin',
+          attributes: ['id', 'username', 'email'],
+          required: false
+        }
+      ]
+    });
+
+    res.json({
+      message: "Reset requests berhasil diambil",
+      data: requests
+    });
+
+  } catch (error) {
+    console.error('Check Reset Request Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+module.exports = { register, login, loginAdmin, refreshToken, logout, logoutAll, forceLogoutUser, checkResetRequest };
