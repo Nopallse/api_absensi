@@ -25,6 +25,9 @@ const { mainSequelize, masterSequelize } = require('./config/database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable trust proxy untuk production dengan proxy (nginx, load balancer, dll)
+app.set('trust proxy', 1);
+
 // Rate limiting untuk mencegah abuse - Optimized for 3000+ users
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 menit

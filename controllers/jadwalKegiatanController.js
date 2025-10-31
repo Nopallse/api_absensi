@@ -1,11 +1,11 @@
 const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, SatkerTbl, MstPegawai, KehadiranKegiatan } = require('../models');
 const { Op, Sequelize } = require('sequelize');
 const ExcelJS = require('exceljs');
-
+const { getTodayDate } = require('../utils/timeUtils');
 // Mendapatkan jadwal kegiatan hari ini
 const getJadwalHariIni = async (req, res) => {
     try {
-        const today = new Date();
+        const today = getTodayDate();
         const todayString = today.toISOString().split('T')[0]; // Format YYYY-MM-DD
         
         console.log('Checking jadwal for today:', todayString);

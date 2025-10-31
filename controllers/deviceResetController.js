@@ -6,7 +6,7 @@ const {
   getUserWithMasterData, 
   getSkpdIdByUserLevel 
 } = require('../utils/userMasterUtils');
-
+const { getTodayDate } = require('../utils/timeUtils');
 // User reset device sendiri (tanpa perlu persetujuan admin jika belum pernah reset dalam 1 bulan)
 const resetDeviceSelf = async (req, res) => {
   try {
@@ -26,7 +26,7 @@ const resetDeviceSelf = async (req, res) => {
     }
 
     // Cek apakah user sudah pernah reset device dalam 30 hari terakhir
-    const thirtyDaysAgo = new Date();
+    const thirtyDaysAgo = getTodayDate();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Cek riwayat reset dari tabel device_reset_requests yang approved
@@ -59,7 +59,7 @@ const resetDeviceSelf = async (req, res) => {
       status: 'approved',
       admin_response: 'Auto-approved (reset mandiri)',
       approved_by: userId, // Self-approved
-      approved_at: new Date()
+      approved_at: getTodayDate()
     });
 
     res.json({
@@ -155,12 +155,12 @@ const requestDeviceResetWithoutLogin = async (req, res) => {
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
       return res.status(401).json({ 
-        error: "Password salah" 
+        error: "Username atau password salah" 
       });
     }
 
     // Cek apakah user sudah pernah reset device dalam 30 hari terakhir
-    const thirtyDaysAgo = new Date();
+    const thirtyDaysAgo = getTodayDate();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Cek riwayat reset dari tabel device_reset_requests yang approved
@@ -189,7 +189,7 @@ const requestDeviceResetWithoutLogin = async (req, res) => {
         status: 'approved',
         admin_response: 'Auto-approved (reset mandiri tanpa login)',
         approved_by: user.id, // Self-approved
-        approved_at: new Date()
+        approved_at: getTodayDate()
       });
 
       return res.json({
@@ -299,8 +299,9 @@ const getAllResetRequests = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
+    console.log(status, page, limit);
 
-    const whereClause = { status: { [Op.ne]: 'approved' } }; // Exclude auto-approved self resets
+    const whereClause = {};
     if (status) {
       whereClause.status = status;
     }
@@ -403,7 +404,7 @@ const updateResetRequestStatus = async (req, res) => {
       status,
       admin_response: admin_response || null,
       approved_by: adminId,
-      approved_at: new Date()
+      approved_at: getTodayDate()
     });
 
     // Jika approved, reset device_id user dan hapus refresh_token

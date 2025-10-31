@@ -5,10 +5,11 @@
  * @returns {Date} Waktu saat ini dalam WIB
  */
 const getWIBDate = () => {
+    // Mendapatkan waktu sekarang dalam UTC
     const now = new Date();
-    // Konversi ke WIB dengan menambahkan 7 jam
-    const wibTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    return wibTime;
+    // Tambahkan offset +7 jam (WIB) dalam milidetik
+    const wib = new Date(now.getTime()  - (now.getTimezoneOffset() * 60 * 1000));
+    return wib;
 };
 
 /**
@@ -17,7 +18,11 @@ const getWIBDate = () => {
  */
 const getTodayDate = () => {
     const now = getWIBDate();
-    return now.toISOString().split('T')[0];
+    // Format YYYY-MM-DD dengan memperhatikan timezone lokal
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
 /**
@@ -56,23 +61,22 @@ const getWeekRange = (date = new Date()) => {
 
 /**
  * Parse jam dari format TIME database ke Date object dalam WIB
- * @param {string} timeString - Jam dalam format HH:MM
+ * @param {string} timeString - Jam dalam format HH:MM:SS atau HH:MM
  * @param {Date} baseDate - Tanggal dasar (default: hari ini)
  * @returns {Date} Date object dengan jam yang di-set dalam WIB
  */
 const parseTimeToDate = (timeString, baseDate = new Date()) => {
-    const [hours, minutes] = timeString.split(':').map(Number);
+    // Handle format HH:MM:SS dan HH:MM
+    const timeParts = timeString.split(':');
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+    const seconds = timeParts[2] ? parseInt(timeParts[2], 10) : 0;
     
-    // Buat tanggal baru dengan timezone WIB
-    const date = new Date();
+    // Buat tanggal baru dengan tanggal dan jam yang di-set
+    const date = new Date(baseDate);
     
-    // Set tanggal dari baseDate
-    date.setFullYear(baseDate.getFullYear());
-    date.setMonth(baseDate.getMonth());
-    date.setDate(baseDate.getDate());
-    
-    // Set jam dalam WIB (tambah 7 jam untuk konversi ke WIB)
-    date.setHours(hours + 7, minutes, 0, 0);
+    // Set jam, menit, dan detik
+    date.setHours(hours, minutes, seconds, 0);
     
     return date;
 };
@@ -83,10 +87,11 @@ const parseTimeToDate = (timeString, baseDate = new Date()) => {
  * @returns {string} Waktu dalam format HH:MM dalam WIB
  */
 const formatTime = (date) => {
-    // Ambil jam dan menit dari date object dalam WIB
-    const hours = date.getUTCHours().toString().padStart(2, '0');
-    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+    // Ambil jam dan menit dari date object (sudah dalam timezone lokal)
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
 };
 
 /**

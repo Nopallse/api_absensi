@@ -562,10 +562,11 @@ const checkResetRequest = async (req, res) => {
       return res.status(401).json({ error: "Username atau password salah" });
     }
     
-    // Get reset requests for this user
+    // Get reset requests for this user (maksimal 3 permintaan terbaru)
     const requests = await DeviceResetRequest.findAll({
       where: { user_id: user.id },
       order: [['created_at', 'DESC']],
+      limit: 3,
       attributes: ['id', 'reason', 'status', 'admin_response', 'created_at', 'approved_at'],
       include: [
         {

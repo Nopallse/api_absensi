@@ -1,6 +1,6 @@
 const { AdminLog, User } = require('../models/index');
 const { Op } = require('sequelize');
-
+const { getTodayDate } = require('../utils/timeUtils');
 /**
  * Get all admin logs with pagination and filtering
  */
@@ -250,7 +250,7 @@ const getAdminLogStats = async (req, res) => {
     });
 
     // Get recent activity (last 7 days)
-    const sevenDaysAgo = new Date();
+    const sevenDaysAgo = getTodayDate();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const recentActivity = await AdminLog.findAll({
@@ -297,7 +297,7 @@ const deleteOldAdminLogs = async (req, res) => {
   try {
     const { days = 90 } = req.body; // Default delete logs older than 90 days
 
-    const cutoffDate = new Date();
+    const cutoffDate = getTodayDate();
     cutoffDate.setDate(cutoffDate.getDate() - days);
 
     const deletedCount = await AdminLog.destroy({

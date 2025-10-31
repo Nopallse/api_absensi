@@ -218,8 +218,8 @@ const createKehadiranBiasa = async(req, res) => {
 // Fungsi helper untuk mendapatkan kegiatan hari ini (OPTIMIZED)
 const getTodayActivitiesForUser = async (kdsatker) => {
     try {
-        const today = new Date().toISOString().split('T')[0]; // Format YYYY-MM-DD
-        
+        const today = getTodayDate(); // Format YYYY-MM-DD
+        console.log(today);
         // Query yang dioptimasi dengan filter langsung di database
         const activities = await MasterJadwalKegiatan.findAll({
             where: {
@@ -250,7 +250,7 @@ const getTodayActivitiesForUser = async (kdsatker) => {
                 ['jam_mulai', 'ASC']
             ]
         });
-
+        console.log(activities);
         // Dapatkan data satker untuk semua kegiatan
         const satkerIds = [...new Set(activities.flatMap(activity => 
             activity.JadwalKegiatanLokasiSatkers.map(jkls => jkls.id_satker)
@@ -297,8 +297,8 @@ const getKehadiranBiasaToday = async(req, res) => {
         const userNip = req.user.username;
     
         // Mendapatkan waktu saat ini dalam WIB
-        const now = new Date();
-        const absenTgl = now.toISOString().split('T')[0];
+        const now = getWIBDate();
+        const absenTgl = getTodayDate();
     
         // Format tanggal untuk absen_tgl (YYYY-MM-DD)
         const startOfDay = new Date(absenTgl);
@@ -422,6 +422,7 @@ const getKehadiranKegiatanToday = async(req, res) => {
             };
         });
 
+        console.log(kegiatanWithAttendance);
         res.status(200).json({
             success: true,
             message: "Data kegiatan dan kehadiran kegiatan berhasil ditemukan",
@@ -934,8 +935,9 @@ const getMonthlyReport = async(req, res) => {
     try {
         const userId = req.user.id;
         const userNip = req.user.username; // Menggunakan username sebagai NIP
-        const year = parseInt(req.query.year) || new Date().getFullYear();
-        const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+        const now = getWIBDate();
+        const year = parseInt(req.query.year) || now.getFullYear();
+        const month = parseInt(req.query.month) || now.getMonth() + 1;
 
         // Format tanggal untuk query
         const startDate = `${year}-${month.toString().padStart(2, '0')}-01`;
@@ -1066,8 +1068,7 @@ const getUserAccessibleLocations = async(req, res) => {
 // Fungsi untuk mendapatkan lokasi absen berdasarkan jadwal kegiatan
 const getLokasiAbsenBerdasarkanJadwal = async (userNip) => {
     try {
-        const today = new Date();
-        const todayString = today.toISOString().split('T')[0]; // Format YYYY-MM-DD
+        const todayString = getTodayDate(); // Format YYYY-MM-DD
         
         // Dapatkan data pegawai
         const pegawai = await MstPegawai.findOne({
@@ -1139,9 +1140,10 @@ const getLokasiAbsenBerdasarkanJadwal = async (userNip) => {
 // Get monthly attendance with filters (admin only)
 const getMonthlyAttendanceByFilter = async (req, res) => {
     try {
+        const now = getWIBDate();
         const { 
-            year = new Date().getFullYear(), 
-            month = new Date().getMonth() + 1,
+            year = now.getFullYear(), 
+            month = now.getMonth() + 1,
             satker,
             bidang,
             user_id,
@@ -1450,9 +1452,10 @@ const getMonthlyAttendanceSummaryByUser = async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized access' });
         }
 
+        const now = getWIBDate();
         const { 
-            year = new Date().getFullYear(), 
-            month = new Date().getMonth() + 1,
+            year = now.getFullYear(), 
+            month = now.getMonth() + 1,
             lokasi_id,
             page = 1,
             limit = 10
@@ -1559,7 +1562,8 @@ const getMonthlyAttendanceSummaryByUser = async (req, res) => {
 const checkTodayAttendance = async (req, res) => {
     try {
         const userNip = req.user.username;
-        const today = new Date();
+        const now = getWIBDate();
+        const today = new Date(now);
         today.setHours(0, 0, 0, 0);
         
         const tomorrow = new Date(today);
@@ -1615,8 +1619,7 @@ const checkTodayAttendance = async (req, res) => {
 // Fungsi helper untuk membuat kehadiran biasa dari kegiatan
 const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, waktuAbsen) => {
     try {
-        const today = new Date();
-        const absenTgl = today.toISOString().split('T')[0];
+        const absenTgl = getTodayDate();
         const startOfDay = new Date(absenTgl);
         const endOfDay = new Date(absenTgl);
         endOfDay.setHours(23, 59, 59, 999);
@@ -1710,8 +1713,7 @@ const createKehadiranKegiatan = async (req, res) => {
         }
 
         // PARALLEL QUERIES untuk performa maksimal
-        const today = new Date();
-        const todayString = today.toISOString().split('T')[0];
+        const todayString = getTodayDate();
         const startOfDay = new Date(todayString);
         const endOfDay = new Date(todayString);
         endOfDay.setHours(23, 59, 59, 999);
