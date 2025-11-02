@@ -3,7 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { generateTokens, verifyRefreshToken } = require("../utils/jwtUtils");
 const { User, AdmOpd, AdmUpt, DeviceResetRequest } = require("../models/index");
-const { SkpdTbl, SatkerTbl, BidangTbl } = require("../models/index");
+const { SatkerTbl, BidangTbl } = require("../models/index");
 const { Op } = require("sequelize");
 
 const register = async (req, res) => {
@@ -11,11 +11,11 @@ const register = async (req, res) => {
     const { username, email, password, level, id_opd, id_upt, status } = req.body;
     const hashedPassword = await bcrypt.hash(password, 10);
     const auth_key = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    
-    const user = await User.create({ 
-      username, 
-      email, 
-      password_hash: hashedPassword, 
+
+    const user = await User.create({
+      username,
+      email,
+      password_hash: hashedPassword,
       auth_key,
       level: level || 'user',
       id_opd,
@@ -23,16 +23,16 @@ const register = async (req, res) => {
       status: status || 'active',
       device_id: null
     });
-    
-    res.status(201).json({ 
-      message: "User berhasil didaftarkan", 
+
+    res.status(201).json({
+      message: "User berhasil didaftarkan",
       user: {
         id: user.id,
         username: user.username,
         email: user.email,
         level: user.level,
         status: user.status
-      } 
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -42,11 +42,8 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log(req.body);
-    console.log(req.headers.device_id);
-    
-    // Find user with related admin data
-    const user = await User.findOne({ 
+
+    const user = await User.findOne({
       where: { username },
       include: [
         {
@@ -59,63 +56,58 @@ const login = async (req, res) => {
         }
       ]
     });
-    
+
     if (!user) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
-    
+
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!passwordMatch) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
 
-    const device_id = req.headers.device_id;
-    
-    // Untuk level 1,2,3 (superadmin, admin_opd, admin_upt) tidak perlu device_id check
+    // Express mengkonversi header ke lowercase
+    // Cek berbagai format: device-id (dash) atau device_id (underscore)
+    const device_id = req.headers['device-id'] || req.headers['device_id'] || req.headers.device_id;
+
     const isAdminLevel = ['1', '2', '3'].includes(user.level);
-    
+
     if (!isAdminLevel) {
-      // Cek apakah device_id sudah digunakan oleh akun lain (hanya untuk pegawai biasa)
       if (device_id) {
-        const existingUserWithDevice = await User.findOne({ 
-          where: { 
+        const existingUserWithDevice = await User.findOne({
+          where: {
             device_id: device_id,
-            id: { [Op.ne]: user.id } // Exclude current user
-          } 
+            id: { [Op.ne]: user.id } 
+          }
         });
-        
+
         if (existingUserWithDevice) {
-          return res.status(401).json({ 
-            error: "Device ID ini sudah digunakan oleh akun lain" 
+          return res.status(401).json({
+            error: "Device ID ini sudah digunakan oleh akun lain"
           });
         }
       }
 
-      if (!user.device_id && req.headers.device_id) {
-        await user.update({ device_id: req.headers.device_id });
+      if (!user.device_id && device_id) {
+        await user.update({ device_id: device_id });
       }
 
       if (user.device_id && device_id && user.device_id !== device_id) {
         return res.status(401).json({ error: "Akun ini digunakan di perangkat lain" });
       }
     }
-    
-    // Generate JWT tokens
+
     const tokenPayload = {
       userId: user.id,
       username: user.username,
       level: user.level
     };
-    
-    const { accessToken, refreshToken } = generateTokens(tokenPayload);
-    
-    // Simpan refresh token ke database
-    await user.update({ refresh_token: refreshToken });
-    
-    console.log("masuk")
 
-    // Prepare response with related data
+    const { accessToken, refreshToken } = generateTokens(tokenPayload);
+
+    await user.update({ refresh_token: refreshToken });
+
     const responseData = {
       message: "Login berhasil",
       accessToken,
@@ -130,45 +122,19 @@ const login = async (req, res) => {
       }
     };
 
-    // Add admin OPD data if exists
     if (user.AdmOpd) {
       const adminOpdData = {
         admopd_id: user.AdmOpd.admopd_id,
-        id_skpd: user.AdmOpd.id_skpd,
         id_satker: user.AdmOpd.id_satker,
         id_bidang: user.AdmOpd.id_bidang,
         kategori: user.AdmOpd.kategori
       };
 
-      // Manually fetch related SKPD data
-      if (user.AdmOpd.id_skpd) {
-        try {
-          console.log('Searching for SKPD with KDSKPD:', user.AdmOpd.id_skpd);
-          const skpdData = await SkpdTbl.findOne({
-            where: { KDSKPD: user.AdmOpd.id_skpd }
-          });
-          console.log('SKPD data found:', skpdData ? skpdData.dataValues : 'null');
-          if (skpdData) {
-            adminOpdData.skpd = {
-              KDSKPD: skpdData.KDSKPD,
-              NMSKPD: skpdData.NMSKPD,
-              StatusSKPD: skpdData.StatusSKPD
-            };
-          }
-        } catch (error) {
-          console.error('Error fetching SKPD data:', error);
-          adminOpdData.skpd = null;
-        }
-      }
-
-      // Manually fetch related Satker data
       if (user.AdmOpd.id_satker) {
         try {
-          console.log('Searching for Satker with KDSATKER:', user.AdmOpd.id_satker);
           const satkerData = await SatkerTbl.findOne({
             where: { KDSATKER: user.AdmOpd.id_satker }
           });
-          console.log('Satker data found:', satkerData ? satkerData.dataValues : 'null');
           if (satkerData) {
             adminOpdData.satker = {
               KDSATKER: satkerData.KDSATKER,
@@ -180,12 +146,10 @@ const login = async (req, res) => {
             adminOpdData.satker = null;
           }
         } catch (error) {
-          console.error('Error fetching Satker data:', error);
           adminOpdData.satker = null;
         }
       }
 
-      // Manually fetch related Bidang data
       if (user.AdmOpd.id_bidang) {
         try {
           const bidangData = await BidangTbl.findOne({
@@ -200,7 +164,6 @@ const login = async (req, res) => {
             };
           }
         } catch (error) {
-          console.error('Error fetching Bidang data:', error);
           adminOpdData.bidang = null;
         }
       }
@@ -208,37 +171,16 @@ const login = async (req, res) => {
       responseData.admin_opd = adminOpdData;
     }
 
-    // Add admin UPT data if exists
     if (user.AdmUpt) {
       const adminUptData = {
         admupt_id: user.AdmUpt.admupt_id,
-        id_skpd: user.AdmUpt.id_skpd,
         id_satker: user.AdmUpt.id_satker,
         id_bidang: user.AdmUpt.id_bidang,
         kategori: user.AdmUpt.kategori,
         umum: user.AdmUpt.umum
       };
 
-      // Manually fetch related SKPD data
-      if (user.AdmUpt.id_skpd) {
-        try {
-          const skpdData = await SkpdTbl.findOne({
-            where: { KDSKPD: user.AdmUpt.id_skpd }
-          });
-          if (skpdData) {
-            adminUptData.skpd = {
-              KDSKPD: skpdData.KDSKPD,
-              NMSKPD: skpdData.NMSKPD,
-              StatusSKPD: skpdData.StatusSKPD
-            };
-          }
-        } catch (error) {
-          console.error('Error fetching SKPD data for UPT:', error);
-          adminUptData.skpd = null;
-        }
-      }
 
-      // Manually fetch related Satker data
       if (user.AdmUpt.id_satker) {
         try {
           const satkerData = await SatkerTbl.findOne({
@@ -253,12 +195,10 @@ const login = async (req, res) => {
             };
           }
         } catch (error) {
-          console.error('Error fetching Satker data for UPT:', error);
           adminUptData.satker = null;
         }
       }
 
-      // Manually fetch related Bidang data
       if (user.AdmUpt.id_bidang) {
         try {
           const bidangData = await BidangTbl.findOne({
@@ -273,7 +213,6 @@ const login = async (req, res) => {
             };
           }
         } catch (error) {
-          console.error('Error fetching Bidang data for UPT:', error);
           adminUptData.bidang = null;
         }
       }
@@ -291,9 +230,9 @@ const loginAdmin = async (req, res) => {
   try {
     const { username, password } = req.body;
     console.log(req.body);
-    
+
     // Find user with related admin data
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       where: { username },
       include: [
         {
@@ -307,13 +246,13 @@ const loginAdmin = async (req, res) => {
       ]
     });
     console.log(user);
-    
+
     if (!user) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
-    
+
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!passwordMatch) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
@@ -324,8 +263,8 @@ const loginAdmin = async (req, res) => {
       return res.status(401).json({ error: "Akun ini bukan admin" });
     }
 
-    
-    
+
+
     // Generate JWT tokens
     const tokenPayload = {
       userId: user.id,
@@ -334,12 +273,12 @@ const loginAdmin = async (req, res) => {
       adminOpdId: user.AdmOpd?.admopd_id || null,
       adminUptId: user.AdmUpt?.admupt_id || null
     };
-    
+
     const { accessToken, refreshToken } = generateTokens(tokenPayload);
-    
+
     // Simpan refresh token ke database
     await user.update({ refresh_token: refreshToken });
-    
+
     console.log("Admin login berhasil")
 
     // Prepare response with related data
@@ -357,7 +296,6 @@ const loginAdmin = async (req, res) => {
       },
       admin_opd: user.AdmOpd ? {
         admopd_id: user.AdmOpd.admopd_id,
-        id_skpd: user.AdmOpd.id_skpd,
         id_satker: user.AdmOpd.id_satker,
         id_bidang: user.AdmOpd.id_bidang,
         kategori: user.AdmOpd.kategori
@@ -368,7 +306,6 @@ const loginAdmin = async (req, res) => {
     if (user.AdmUpt) {
       responseData.admin_upt = {
         admupt_id: user.AdmUpt.admupt_id,
-        id_skpd: user.AdmUpt.id_skpd,
         id_satker: user.AdmUpt.id_satker,
         id_bidang: user.AdmUpt.id_bidang,
         kategori: user.AdmUpt.kategori,
@@ -388,9 +325,9 @@ const refreshToken = async (req, res) => {
   try {
     const { refreshToken: token } = req.body;
     console.log('Refresh Token:', token);
-    
+
     if (!token) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: "Refresh token diperlukan",
         code: "REFRESH_TOKEN_REQUIRED"
       });
@@ -398,7 +335,7 @@ const refreshToken = async (req, res) => {
 
     // Verify refresh token
     const decoded = verifyRefreshToken(token);
-    
+
     // Cari user dan verify refresh token di database
     const user = await User.findOne({
       where: {
@@ -408,7 +345,7 @@ const refreshToken = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: "Refresh token tidak valid",
         code: "INVALID_REFRESH_TOKEN"
       });
@@ -422,9 +359,9 @@ const refreshToken = async (req, res) => {
       username: user.username,
       level: user.level
     };
-    
+
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(tokenPayload);
-    
+
     // Update refresh token di database
     await user.update({ refresh_token: newRefreshToken });
 
@@ -436,14 +373,14 @@ const refreshToken = async (req, res) => {
 
   } catch (error) {
     console.error('Refresh Token Error:', error);
-    
+
     if (error.message === 'Invalid refresh token' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: "Refresh token tidak valid atau sudah kadaluarsa",
         code: "REFRESH_TOKEN_EXPIRED"
       });
     }
-    
+
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -452,9 +389,9 @@ const refreshToken = async (req, res) => {
 const logout = async (req, res) => {
   try {
     const { refreshToken: token } = req.body;
-    
+
     if (!token) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Refresh token diperlukan untuk logout",
         code: "REFRESH_TOKEN_REQUIRED"
       });
@@ -469,8 +406,8 @@ const logout = async (req, res) => {
       await user.update({ refresh_token: null });
     }
 
-    res.json({ 
-      message: "Logout berhasil" 
+    res.json({
+      message: "Logout berhasil"
     });
 
   } catch (error) {
@@ -483,15 +420,15 @@ const logout = async (req, res) => {
 const logoutAll = async (req, res) => {
   try {
     const userId = req.user.id; // Dari JWT middleware
-    
+
     // Hapus semua refresh token untuk user ini
     await User.update(
       { refresh_token: null },
       { where: { id: userId } }
     );
 
-    res.json({ 
-      message: "Logout dari semua perangkat berhasil" 
+    res.json({
+      message: "Logout dari semua perangkat berhasil"
     });
 
   } catch (error) {
@@ -504,9 +441,9 @@ const logoutAll = async (req, res) => {
 const forceLogoutUser = async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     if (!userId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "User ID diperlukan",
         code: "USER_ID_REQUIRED"
       });
@@ -515,7 +452,7 @@ const forceLogoutUser = async (req, res) => {
     // Cek apakah user ada
     const user = await User.findByPk(userId);
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: "User tidak ditemukan",
         code: "USER_NOT_FOUND"
       });
@@ -527,7 +464,7 @@ const forceLogoutUser = async (req, res) => {
       device_id: null
     });
 
-    res.json({ 
+    res.json({
       message: "User berhasil di-logout paksa dari semua perangkat",
       success: true
     });
@@ -541,27 +478,27 @@ const forceLogoutUser = async (req, res) => {
 const checkResetRequest = async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     if (!username || !password) {
       return res.status(400).json({ error: "Username dan password harus diisi" });
     }
-    
+
     // Find user
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       where: { username }
     });
-    
+
     if (!user) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
-    
+
     // Verify password
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!passwordMatch) {
       return res.status(401).json({ error: "Username atau password salah" });
     }
-    
+
     // Get reset requests for this user (maksimal 3 permintaan terbaru)
     const requests = await DeviceResetRequest.findAll({
       where: { user_id: user.id },
