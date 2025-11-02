@@ -2,7 +2,7 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('jam_dinas', {
+    await queryInterface.createTable('jam_dinas_pegawai', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -11,7 +11,8 @@ module.exports = {
       },
       nama: {
         type: Sequelize.STRING,
-        allowNull: false
+        allowNull: false,
+        comment: 'Nama jam dinas'
       },
       hari_kerja: {
         type: Sequelize.SMALLINT,
@@ -40,9 +41,13 @@ module.exports = {
         defaultValue: Sequelize.NOW
       }
     });
+
+    // Add index for better performance
+    await queryInterface.addIndex('jam_dinas_pegawai', ['status']);
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('jam_dinas');
+    await queryInterface.dropTable('jam_dinas_pegawai');
   }
 };
+

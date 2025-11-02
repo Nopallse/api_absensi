@@ -55,7 +55,7 @@ module.exports = {
         comment: 'User agent browser/admin'
       },
       request_data: {
-        type: Sequelize.JSON,
+        type: Sequelize.TEXT,
         allowNull: true,
         comment: 'Data request yang dikirim (untuk audit trail)'
       },
@@ -65,7 +65,7 @@ module.exports = {
         comment: 'HTTP status code response'
       },
       response_data: {
-        type: Sequelize.JSON,
+        type: Sequelize.TEXT,
         allowNull: true,
         comment: 'Data response yang dikembalikan (untuk audit trail)'
       },
@@ -82,12 +82,12 @@ module.exports = {
       created_at: {
         allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.NOW
       },
       updated_at: {
         allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+        defaultValue: Sequelize.NOW
       }
     });
 

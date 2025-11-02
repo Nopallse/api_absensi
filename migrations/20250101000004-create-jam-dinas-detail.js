@@ -11,16 +11,25 @@ module.exports = {
       },
       id_jamdinas: {
         type: Sequelize.INTEGER,
-        allowNull: false
+        allowNull: false,
+        references: {
+          model: 'jam_dinas_pegawai',
+          key: 'id'
+        },
+        onUpdate: 'CASCADE',
+        onDelete: 'CASCADE',
+        comment: 'ID jam dinas'
       },
       hari: {
         type: Sequelize.ENUM('senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'),
-        allowNull: false
+        allowNull: false,
+        comment: 'Hari dalam seminggu'
       },
       tipe: {
         type: Sequelize.ENUM('normal', 'ramadhan'),
         allowNull: false,
-        defaultValue: 'normal'
+        defaultValue: 'normal',
+        comment: 'Tipe jam dinas: normal atau ramadhan'
       },
       jam_masuk_mulai: {
         type: Sequelize.TIME,
@@ -53,9 +62,15 @@ module.exports = {
         defaultValue: Sequelize.NOW
       }
     });
+
+    // Add indexes for better performance
+    await queryInterface.addIndex('jam_dinas_detail', ['id_jamdinas']);
+    await queryInterface.addIndex('jam_dinas_detail', ['hari']);
+    await queryInterface.addIndex('jam_dinas_detail', ['tipe']);
   },
 
   down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('jam_dinas_detail');
   }
 };
+

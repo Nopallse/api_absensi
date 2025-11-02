@@ -66,9 +66,25 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'User agent browser/admin'
     },
     request_data: {
-      type: DataTypes.JSON,
+      type: DataTypes.TEXT,
       allowNull: true,
-      comment: 'Data request yang dikirim (untuk audit trail)'
+      comment: 'Data request yang dikirim (untuk audit trail)',
+      get() {
+        const value = this.getDataValue('request_data');
+        if (!value) return null;
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          return value;
+        }
+      },
+      set(value) {
+        if (value && typeof value === 'object') {
+          this.setDataValue('request_data', JSON.stringify(value));
+        } else {
+          this.setDataValue('request_data', value);
+        }
+      }
     },
     response_status: {
       type: DataTypes.INTEGER,
@@ -76,9 +92,25 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'HTTP status code response'
     },
     response_data: {
-      type: DataTypes.JSON,
+      type: DataTypes.TEXT,
       allowNull: true,
-      comment: 'Data response yang dikembalikan (untuk audit trail)'
+      comment: 'Data response yang dikembalikan (untuk audit trail)',
+      get() {
+        const value = this.getDataValue('response_data');
+        if (!value) return null;
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          return value;
+        }
+      },
+      set(value) {
+        if (value && typeof value === 'object') {
+          this.setDataValue('response_data', JSON.stringify(value));
+        } else {
+          this.setDataValue('response_data', value);
+        }
+      }
     },
     error_message: {
       type: DataTypes.TEXT,
