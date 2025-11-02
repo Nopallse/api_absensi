@@ -67,9 +67,7 @@ const login = async (req, res) => {
       return res.status(401).json({ error: "Username atau password salah" });
     }
 
-    // Express mengkonversi header ke lowercase
-    // Cek berbagai format: device-id (dash) atau device_id (underscore)
-    const device_id = req.headers['device-id'] || req.headers['device_id'] || req.headers.device_id;
+    const device_id = req.headers['x-device-id'];
 
     const isAdminLevel = ['1', '2', '3'].includes(user.level);
 
@@ -89,8 +87,8 @@ const login = async (req, res) => {
         }
       }
 
-      if (!user.device_id && device_id) {
-        await user.update({ device_id: device_id });
+      if (!user.device_id && req.headers['x-device-id']) {
+        await user.update({ device_id: req.headers['x-device-id'] });
       }
 
       if (user.device_id && device_id && user.device_id !== device_id) {

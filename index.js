@@ -50,7 +50,7 @@ app.use(limiter); // Rate limiting
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT','OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Device_Id', 'device-id', 'device_id', 'Authorization', 'access-control-allow-methods', 'access-control-allow-origin', 'access-control-allow-headers'],
+    allowedHeaders: ['Content-Type', 'Device_Id', 'Authorization', 'access-control-allow-methods', 'access-control-allow-origin', 'access-control-allow-headers'],
     credentials: true
 }));
 

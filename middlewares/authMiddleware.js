@@ -92,9 +92,7 @@ const authMiddleware = (options = {}) => {
       
       // Fallback ke device ID authentication (untuk backward compatibility)
       if (options.allowDeviceAuth !== false) {
-        // Express mengkonversi header ke lowercase
-        // Cek berbagai format: device-id (dash) atau device_id (underscore)
-        const deviceId = req.headers['device-id'] || req.headers['device_id'] || req.headers.device_id;
+        const deviceId = req.headers['x-device-id'];
         if (!deviceId) {
           return res.status(401).json({ 
             error: "Authentication diperlukan. Gunakan Bearer token atau Device ID",
@@ -227,9 +225,7 @@ const requireUserDeviceCheck = () => {
         return next(); // Admin tidak perlu pengecekan device_id
       }
 
-      // Express mengkonversi header ke lowercase
-      // Cek berbagai format: device-id (dash) atau device_id (underscore)
-      const deviceId = req.headers['device-id'] || req.headers['device_id'] || req.headers.device_id;
+      const deviceId = req.headers['x-device-id'];
       
       if (!deviceId) {
         return res.status(401).json({ 
