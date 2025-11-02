@@ -6,7 +6,7 @@ const {
   getUserWithMasterData, 
   getSkpdIdByUserLevel 
 } = require('../utils/userMasterUtils');
-const { getTodayDate } = require('../utils/timeUtils');
+const { getTodayDate, getWIBDate } = require('../utils/timeUtils');
 // User reset device sendiri (tanpa perlu persetujuan admin jika belum pernah reset dalam 1 bulan)
 const resetDeviceSelf = async (req, res) => {
   try {
@@ -26,7 +26,7 @@ const resetDeviceSelf = async (req, res) => {
     }
 
     // Cek apakah user sudah pernah reset device dalam 30 hari terakhir
-    const thirtyDaysAgo = getTodayDate();
+    const thirtyDaysAgo = getWIBDate();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Cek riwayat reset dari tabel device_reset_requests yang approved
@@ -160,7 +160,7 @@ const requestDeviceResetWithoutLogin = async (req, res) => {
     }
 
     // Cek apakah user sudah pernah reset device dalam 30 hari terakhir
-    const thirtyDaysAgo = getTodayDate();
+    const thirtyDaysAgo = getWIBDate();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Cek riwayat reset dari tabel device_reset_requests yang approved
