@@ -28,25 +28,10 @@ const PORT = process.env.PORT || 3000;
 // Enable trust proxy untuk production dengan proxy (nginx, load balancer, dll)
 app.set('trust proxy', 1);
 
-// Rate limiting untuk mencegah abuse - Optimized for 3000+ users
-const limiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 menit
-  max: 50, // Maksimal 50 request per menit per IP (untuk 3000 users = 150,000 req/min total)
-  message: {
-    success: false,
-    error: 'Terlalu banyak request, coba lagi nanti'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting untuk health check dan performance monitoring
-    return req.path === '/api/performance/stats' || req.path.startsWith('/api/performance/debug');
-  }
-});
+
 
 // Middleware
 app.use(compression()); // Kompresi response untuk performa lebih baik
-app.use(limiter); // Rate limiting
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT','OPTIONS'],

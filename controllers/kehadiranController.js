@@ -453,7 +453,7 @@ const getKehadiranByUserId = async(req, res) => {
         const { start_date, end_date, sort = 'desc' } = req.query;
 
         // Get user by ID to get the username (NIP)
-        const user = await User.findByPk(user_id);
+        const user = await User.findOne({ where: { username: user_id } });
         if (!user) {
             return res.status(404).json({ error: 'User tidak ditemukan' });
         }
