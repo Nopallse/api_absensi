@@ -269,8 +269,7 @@ const mapUsersWithMasterDataOptimized = async (users) => {
  */
 const getUserWithMasterData = async (userId, options = {}) => {
   try {
-    const user = await User.findOne({
-      where: { username: userId },
+    const user = await User.findByPk(userId, {
       include: [
         {
           model: AdmOpd,
@@ -284,7 +283,6 @@ const getUserWithMasterData = async (userId, options = {}) => {
         }
       ]
     });
-    console.log(user,"<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
 
     if (!user) {
       return null;
