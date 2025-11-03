@@ -823,11 +823,12 @@ const getAttendanceHistory = async(req, res) => {
         const userNip = req.user.username; // Menggunakan username sebagai NIP
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 10;
-        const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
-        const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+        const tanggalMulai = req.query.tanggal_mulai || req.query.startDate;
+        const tanggalSelesai = req.query.tanggal_selesai || req.query.endDate;
+        const startDate = tanggalMulai ? new Date(tanggalMulai) : null;
+        const endDate = tanggalSelesai ? new Date(tanggalSelesai) : null;
         const status = req.query.status; 
         const offset = (page - 1) * limit;
-        console.log(req.query);
 
       
         // Build where clause
