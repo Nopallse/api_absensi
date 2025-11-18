@@ -16,6 +16,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "id_kegiatan",
         as: 'kehadiran'
       });
+      
+      // Relasi dengan grup peserta kegiatan
+      MasterJadwalKegiatan.hasMany(models.GrupPesertaKegiatan, { 
+        foreignKey: "id_kegiatan",
+        as: 'grup_peserta'
+      });
     }
   }
   

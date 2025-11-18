@@ -22,13 +22,17 @@ const distPath = path.join(__dirname, "../fe/dist");
 // Import database connections
 const { mainSequelize, masterSequelize } = require('./config/database');
 
+// Import request logging middleware
+const requestLogMiddleware = require('./middlewares/requestLogMiddleware');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Enable trust proxy untuk production dengan proxy (nginx, load balancer, dll)
 app.set('trust proxy', 1);
 
-
+// Request logging middleware - harus ditempatkan di awal untuk mencatat semua request
+app.use(requestLogMiddleware);
 
 // Middleware
 app.use(compression()); // Kompresi response untuk performa lebih baik

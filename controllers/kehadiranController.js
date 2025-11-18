@@ -1,4 +1,4 @@
-const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, KehadiranKegiatan, SatkerTbl, BidangTbl, BidangSub } = require('../models');
+const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, KehadiranKegiatan, SatkerTbl, BidangTbl, BidangSub, GrupPesertaKegiatan, PesertaGrupKegiatan } = require('../models');
 const Sequelize = require('sequelize');
 const { Op } = Sequelize;
 const { validationResult } = require('express-validator');
@@ -215,23 +215,65 @@ const createKehadiranBiasa = async(req, res) => {
     }
 };
 
-// Fungsi helper untuk mendapatkan kegiatan hari ini (OPTIMIZED)
-const getTodayActivitiesForUser = async (kdsatker) => {
+// Fungsi helper untuk mendapatkan kegiatan hari ini berdasarkan grup peserta (OPTIMIZED)
+const getTodayActivitiesForUser = async (userNip) => {
     try {
         const today = getTodayDate(); // Format YYYY-MM-DD
-        console.log(today);
-        // Query yang dioptimasi dengan filter langsung di database
+        
+        // Cari semua grup peserta yang berisi NIP user ini (sama seperti getKehadiranKegiatan)
+        const pesertaGrupList = await PesertaGrupKegiatan.findAll({
+            where: {
+                nip: userNip
+            },
+            attributes: ['id_grup_peserta'],
+            include: [
+                {
+                    model: GrupPesertaKegiatan,
+                    as: 'grup',
+                    attributes: ['id_grup_peserta', 'id_kegiatan', 'lokasi_id', 'nama_grup', 'jenis_grup', 'id_satker'],
+                    include: [
+                        {
+                            model: MasterJadwalKegiatan,
+                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'],
+                            required: false // Tidak required agar semua grup terambil
+                        },
+                        {
+                            model: Lokasi,
+                            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
+                        }
+                    ],
+                    required: true
+                }
+            ]
+        });
+
+        // Ekstrak id_kegiatan yang unik dari grup peserta
+        const kegiatanIds = [...new Set(
+            pesertaGrupList
+                .map(pg => pg.grup?.id_kegiatan)
+                .filter(id => id !== null && id !== undefined)
+        )];
+        console.log('>>>>>>>>>>>>>>> kegiatanIds', kegiatanIds);
+
+        if (kegiatanIds.length === 0) {
+            return [];
+        }   
+
+        console.log('>>>>>>>>>>>>>>> today', today);
+
+        // Dapatkan kegiatan dengan grup peserta dan lokasi, dengan filter tanggal hari ini
         const activities = await MasterJadwalKegiatan.findAll({
             where: {
-                tanggal_kegiatan: today
+                id_kegiatan: {
+                    [Op.in]: kegiatanIds
+                },
+                tanggal_kegiatan: today // DATEONLY menggunakan format string YYYY-MM-DD
             },
             include: [
                 {
-                    model: JadwalKegiatanLokasiSatker,
-                    where: {
-                        id_satker: kdsatker // Filter langsung di database
-                    },
-                    required: true, // INNER JOIN untuk performa lebih baik
+                    model: GrupPesertaKegiatan,
+                    as: 'grup_peserta',
+                    attributes: ['id_grup_peserta', 'lokasi_id', 'nama_grup', 'jenis_grup', 'id_satker'],
                     include: [
                         {
                             model: Lokasi,
@@ -239,52 +281,83 @@ const getTodayActivitiesForUser = async (kdsatker) => {
                                 status: true
                             },
                             required: true,
-                            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range'] // Hanya ambil field yang diperlukan
+                            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
                         }
-                    ],
-                    attributes: ['id_satker'] // Hanya ambil field yang diperlukan
+                    ]
                 }
             ],
-            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'], // Hanya ambil field yang diperlukan
-            order: [
-                ['jam_mulai', 'ASC']
-            ]
+            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'],
+            order: [['jam_mulai', 'ASC']]
         });
-        console.log(activities);
-        // Dapatkan data satker untuk semua kegiatan
-        const satkerIds = [...new Set(activities.flatMap(activity => 
-            activity.JadwalKegiatanLokasiSatkers.map(jkls => jkls.id_satker)
-        ))];
+        console.log('>>>>>>>>>>>>>>> activities', activities);
+
+        // Dapatkan semua id_satker yang terlibat
+        const satkerIds = [...new Set(
+            activities.flatMap(activity => 
+                activity.grup_peserta
+                    ?.filter(gp => gp.id_satker)
+                    .map(gp => gp.id_satker)
+                    .filter(Boolean) || []
+            )
+        )];
         
-        const satkerList = await SatkerTbl.findAll({
+        const satkerList = satkerIds.length > 0 ? await SatkerTbl.findAll({
             where: {
                 KDSATKER: {
                     [Op.in]: satkerIds
                 }
             },
             attributes: ['KDSATKER', 'NMSATKER']
-        });
+        }) : [];
 
-        return activities.map(activity => ({
-            id_kegiatan: activity.id_kegiatan,
-            tanggal_kegiatan: activity.tanggal_kegiatan,
-            jenis_kegiatan: activity.jenis_kegiatan,
-            keterangan: activity.keterangan,
-            jam_mulai: activity.jam_mulai,
-            jam_selesai: activity.jam_selesai,
-            lokasi_list: activity.JadwalKegiatanLokasiSatkers.map(jkls => {
-                const satker = satkerList.find(s => s.KDSATKER === jkls.id_satker);
-                return {
-                    lokasi_id: jkls.Lokasi.lokasi_id,
-                    ket: jkls.Lokasi.ket,
-                    lat: jkls.Lokasi.lat,
-                    lng: jkls.Lokasi.lng,
-                    range: jkls.Lokasi.range,
-                    satker: jkls.id_satker,
-                    nama_satker: satker ? satker.NMSATKER : null
-                };
-            })
-        }));
+        // Mapping kegiatan dengan lokasi dari grup peserta yang berisi user
+        return activities.map(activity => {
+            const lokasiListData = [];
+            
+            if (activity.grup_peserta && Array.isArray(activity.grup_peserta)) {
+                // Filter grup yang berisi user ini
+                const grupPesertaUser = pesertaGrupList
+                    .filter(pg => pg.grup?.id_kegiatan === activity.id_kegiatan)
+                    .map(pg => pg.grup?.id_grup_peserta)
+                    .filter(Boolean);
+                
+                activity.grup_peserta
+                    .filter(gp => grupPesertaUser.includes(gp.id_grup_peserta))
+                    .forEach(gp => {
+                        if (gp.Lokasi) {
+                            const satker = gp.id_satker 
+                                ? satkerList.find(s => s.KDSATKER === gp.id_satker)
+                                : null;
+                            
+                            // Cek apakah lokasi sudah ada di list (untuk menghindari duplikat)
+                            const lokasiExists = lokasiListData.find(l => l.lokasi_id === gp.Lokasi.lokasi_id);
+                            if (!lokasiExists) {
+                                lokasiListData.push({
+                                    lokasi_id: gp.Lokasi.lokasi_id,
+                                    ket: gp.Lokasi.ket,
+                                    lat: gp.Lokasi.lat,
+                                    lng: gp.Lokasi.lng,
+                                    range: gp.Lokasi.range,
+                                    satker: gp.id_satker || null,
+                                    nama_satker: satker ? satker.NMSATKER : null,
+                                    nama_grup: gp.nama_grup,
+                                    jenis_grup: gp.jenis_grup
+                                });
+                            }
+                        }
+                    });
+            }
+
+            return {
+                id_kegiatan: activity.id_kegiatan,
+                tanggal_kegiatan: activity.tanggal_kegiatan,
+                jenis_kegiatan: activity.jenis_kegiatan,
+                keterangan: activity.keterangan,
+                jam_mulai: activity.jam_mulai,
+                jam_selesai: activity.jam_selesai,
+                lokasi_list: lokasiListData
+            };
+        });
     } catch (error) {
         console.error('Error getting today activities:', error);
         return [];
@@ -371,7 +444,6 @@ const getKehadiranBiasaToday = async(req, res) => {
 const getKehadiranKegiatanToday = async(req, res) => {
     try {
         const userNip = req.user.username; // Menggunakan username sebagai NIP
-
         // Mendapatkan waktu saat ini dalam WIB
         const now = getWIBDate();
         const absenTgl = now.toISOString().split('T')[0];
@@ -381,20 +453,11 @@ const getKehadiranKegiatanToday = async(req, res) => {
         const endOfDay = new Date(absenTgl);
         endOfDay.setHours(23, 59, 59, 999);
 
-        // Dapatkan data pegawai untuk mendapatkan satker
-        const pegawai = await getPegawaiByNip(userNip);
-        
-        if (!pegawai) {
-            return res.status(404).json({ 
-                success: false,
-                message: "Data pegawai tidak ditemukan" 
-            });
-        }
-
         // PARALLEL PROCESSING: Jalankan query kegiatan dan kehadiran kegiatan secara bersamaan
         const [kegiatanHariIni, kehadiranKegiatan] = await Promise.all([
-            // Dapatkan kegiatan hari ini
-            getTodayActivitiesForUser(pegawai.KDSATKER),
+            // Dapatkan kegiatan hari ini berdasarkan grup peserta
+            getTodayActivitiesForUser(userNip),
+
             // Cek kehadiran kegiatan hari ini
             KehadiranKegiatan.findAll({
                 where: {
@@ -410,7 +473,7 @@ const getKehadiranKegiatanToday = async(req, res) => {
                         attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
                     }
                 ],
-                attributes: ['absen_tgljam', 'absen_kat']
+                attributes: ['id_kegiatan', 'absen_tgljam', 'absen_kat', 'lokasi_id']
             })
         ]);
 
@@ -419,10 +482,14 @@ const getKehadiranKegiatanToday = async(req, res) => {
             const kehadiran = kehadiranKegiatan.find(k => k.id_kegiatan === kegiatan.id_kegiatan);
             return {
                 ...kegiatan,
+                kehadiran_data: kehadiran ? {
+                    absen_tgljam: kehadiran.absen_tgljam,
+                    absen_kat: kehadiran.absen_kat,
+                    lokasi_id: kehadiran.lokasi_id
+                } : null
             };
         });
 
-        console.log(kegiatanWithAttendance);
         res.status(200).json({
             success: true,
             message: "Data kegiatan dan kehadiran kegiatan berhasil ditemukan",
@@ -1826,12 +1893,9 @@ const getKehadiranKegiatan = async (req, res) => {
     try {
         const userNip = req.user.username;
         const { page = 1, limit = 10, tanggal_mulai, tanggal_selesai } = req.query;
-        console.log(req.query);
+        
         // Build where condition untuk kegiatan
         const kegiatanWhereCondition = {};
-        const pegawai = await MstPegawai.findOne({
-            where: { NIP: userNip }
-        });
 
         // Add date filter if provided
         if (tanggal_mulai && tanggal_selesai) {
@@ -1841,19 +1905,72 @@ const getKehadiranKegiatan = async (req, res) => {
             };
         }
 
-        const offset = (page - 1) * limit;
+        // Cari semua grup peserta yang berisi NIP user ini
+        const pesertaGrupList = await PesertaGrupKegiatan.findAll({
+            where: {
+                nip: userNip
+            },
+            attributes: ['id_grup_peserta'],
+            include: [
+                {
+                    model: GrupPesertaKegiatan,
+                    as: 'grup',
+                    attributes: ['id_grup_peserta', 'id_kegiatan', 'lokasi_id', 'nama_grup', 'jenis_grup', 'id_satker'],
+                    include: [
+                        {
+                            model: MasterJadwalKegiatan,
+                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
+                        },
+                        {
+                            model: Lokasi,
+                            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
+                        }
+                    ]
+                }
+            ]
+        });
+
+        // Ekstrak id_kegiatan yang unik dari grup peserta
+        const kegiatanIds = [...new Set(
+            pesertaGrupList
+                .map(pg => pg.grup?.id_kegiatan)
+                .filter(id => id !== null && id !== undefined)
+        )];
+
+        if (kegiatanIds.length === 0) {
+            return res.json({
+                success: true,
+                data: [],
+                pagination: {
+                    current_page: parseInt(page),
+                    per_page: parseInt(limit),
+                    total: 0,
+                    total_pages: 0
+                }
+            });
+        }
+
+        // Tambahkan filter id_kegiatan ke where condition
+        kegiatanWhereCondition.id_kegiatan = {
+            [Op.in]: kegiatanIds
+        };
+
+        const offset = (parseInt(page) - 1) * parseInt(limit);
 
         // Dapatkan semua kegiatan dengan pagination
         const { count, rows: kegiatanList } = await MasterJadwalKegiatan.findAndCountAll({
             where: kegiatanWhereCondition,
             include: [
                 {
-                    model: JadwalKegiatanLokasiSatker,
-                    where: {
-                        id_satker: pegawai.KDSATKER
-                    },
-                    required: true,
-                    attributes: ['id', 'id_satker', 'lokasi_id']
+                    model: GrupPesertaKegiatan,
+                    as: 'grup_peserta',
+                    attributes: ['id_grup_peserta', 'lokasi_id', 'nama_grup', 'jenis_grup', 'id_satker'],
+                    include: [
+                        {
+                            model: Lokasi,
+                            attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
+                        }
+                    ]
                 }
             ],
             order: [['tanggal_kegiatan', 'DESC'], ['jam_mulai', 'ASC']],
@@ -1861,43 +1978,32 @@ const getKehadiranKegiatan = async (req, res) => {
             offset: offset
         });
 
-        // Dapatkan lokasi untuk kegiatan-kegiatan tersebut
-        const lokasiIds = [...new Set(kegiatanList.flatMap(k => 
-            k.JadwalKegiatanLokasiSatkers.map(jkls => jkls.lokasi_id)
-        ))];
+        // Dapatkan semua id_satker yang terlibat untuk mendapatkan nama satker
+        const satkerIds = [...new Set(
+            kegiatanList.flatMap(k => 
+                k.grup_peserta
+                    ?.filter(gp => gp.id_satker)
+                    .map(gp => gp.id_satker)
+                    .filter(Boolean) || []
+            )
+        )];
         
-        // Dapatkan semua id_satker yang terlibat
-        const satkerIds = [...new Set(kegiatanList.flatMap(k => 
-            k.JadwalKegiatanLokasiSatkers.map(jkls => jkls.id_satker)
-        ))];
-        
-        const [lokasiList, satkerList] = await Promise.all([
-            Lokasi.findAll({
-                where: {
-                    lokasi_id: {
-                        [Op.in]: lokasiIds
-                    },
-                    status: true
-                },
-                attributes: ['lokasi_id', 'ket', 'lat', 'lng', 'range']
-            }),
-            SatkerTbl.findAll({
-                where: {
-                    KDSATKER: {
-                        [Op.in]: satkerIds
-                    }
-                },
-                attributes: ['KDSATKER', 'NMSATKER']
-            })
-        ]);
+        const satkerList = satkerIds.length > 0 ? await SatkerTbl.findAll({
+            where: {
+                KDSATKER: {
+                    [Op.in]: satkerIds
+                }
+            },
+            attributes: ['KDSATKER', 'NMSATKER']
+        }) : [];
 
         // Dapatkan kehadiran user untuk kegiatan-kegiatan tersebut
-        const kegiatanIds = kegiatanList.map(kegiatan => kegiatan.id_kegiatan);
+        const kegiatanIdsFromList = kegiatanList.map(kegiatan => kegiatan.id_kegiatan);
         const kehadiranUser = await KehadiranKegiatan.findAll({
             where: {
                 absen_nip: userNip,
                 id_kegiatan: {
-                    [Op.in]: kegiatanIds
+                    [Op.in]: kegiatanIdsFromList
                 }
             },
             attributes: ['id_kegiatan', 'absen_tgljam', 'absen_kat', 'lokasi_id']
@@ -1907,25 +2013,42 @@ const getKehadiranKegiatan = async (req, res) => {
         const kegiatanWithAttendance = kegiatanList.map(kegiatan => {
             const kehadiran = kehadiranUser.find(k => k.id_kegiatan === kegiatan.id_kegiatan);
             
-            // Pastikan JadwalKegiatanLokasiSatkers ada dan tidak null
-            const lokasiListData = kegiatan.JadwalKegiatanLokasiSatkers 
-                ? kegiatan.JadwalKegiatanLokasiSatkers
-                    .filter(jkls => jkls && jkls.lokasi_id) // Filter yang tidak null
-                    .map(jkls => {
-                        const lokasi = lokasiList.find(l => l.lokasi_id === jkls.lokasi_id);
-                        const satker = satkerList.find(s => s.KDSATKER === jkls.id_satker);
-                        return lokasi ? {
-                            lokasi_id: lokasi.lokasi_id,
-                            ket: lokasi.ket,
-                            lat: lokasi.lat,
-                            lng: lokasi.lng,
-                            range: lokasi.range,
-                            satker: jkls.id_satker,
-                            nama_satker: satker ? satker.NMSATKER : null
-                        } : null;
-                    })
-                    .filter(l => l !== null) // Filter hasil null
-                : [];
+            // Dapatkan lokasi dari grup peserta yang berisi user ini
+            const lokasiListData = [];
+            
+            if (kegiatan.grup_peserta && Array.isArray(kegiatan.grup_peserta)) {
+                // Filter grup yang berisi user ini
+                const grupPesertaUser = pesertaGrupList
+                    .filter(pg => pg.grup?.id_kegiatan === kegiatan.id_kegiatan)
+                    .map(pg => pg.grup?.id_grup_peserta)
+                    .filter(Boolean);
+                
+                kegiatan.grup_peserta
+                    .filter(gp => grupPesertaUser.includes(gp.id_grup_peserta))
+                    .forEach(gp => {
+                        if (gp.Lokasi) {
+                            const satker = gp.id_satker 
+                                ? satkerList.find(s => s.KDSATKER === gp.id_satker)
+                                : null;
+                            
+                            // Cek apakah lokasi sudah ada di list (untuk menghindari duplikat)
+                            const lokasiExists = lokasiListData.find(l => l.lokasi_id === gp.Lokasi.lokasi_id);
+                            if (!lokasiExists) {
+                                lokasiListData.push({
+                                    lokasi_id: gp.Lokasi.lokasi_id,
+                                    ket: gp.Lokasi.ket,
+                                    lat: gp.Lokasi.lat,
+                                    lng: gp.Lokasi.lng,
+                                    range: gp.Lokasi.range,
+                                    satker: gp.id_satker || null,
+                                    nama_satker: satker ? satker.NMSATKER : null,
+                                    nama_grup: gp.nama_grup,
+                                    jenis_grup: gp.jenis_grup
+                                });
+                            }
+                        }
+                    });
+            }
             
             return {
                 id_kegiatan: kegiatan.id_kegiatan,
@@ -1950,7 +2073,7 @@ const getKehadiranKegiatan = async (req, res) => {
                 current_page: parseInt(page),
                 per_page: parseInt(limit),
                 total: count,
-                total_pages: Math.ceil(count / limit)
+                total_pages: Math.ceil(count / parseInt(limit))
             }
         });
 

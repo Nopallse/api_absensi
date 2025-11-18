@@ -53,6 +53,14 @@ db[masterJadwalKegiatanModel.name] = masterJadwalKegiatanModel;
 const jadwalKegiatanLokasiSkpdModel = require('./jadwalKegiatanLokasiSatker.js')(mainSequelize, Sequelize.DataTypes);
 db[jadwalKegiatanLokasiSkpdModel.name] = jadwalKegiatanLokasiSkpdModel;
 
+// Load model grup peserta kegiatan
+const grupPesertaKegiatanModel = require('./grupPesertaKegiatan.js')(mainSequelize, Sequelize.DataTypes);
+db[grupPesertaKegiatanModel.name] = grupPesertaKegiatanModel;
+
+// Load model peserta grup kegiatan
+const pesertaGrupKegiatanModel = require('./pesertaGrupKegiatan.js')(mainSequelize, Sequelize.DataTypes);
+db[pesertaGrupKegiatanModel.name] = pesertaGrupKegiatanModel;
+
 // Load model admin log
 const adminLogModel = require('./adminLog.js')(mainSequelize, Sequelize.DataTypes);
 db[adminLogModel.name] = adminLogModel;

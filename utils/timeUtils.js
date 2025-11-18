@@ -5,23 +5,27 @@
  * @returns {Date} Waktu saat ini dalam WIB
  */
 const getWIBDate = () => {
-    // Mendapatkan waktu sekarang dalam UTC
     const now = new Date();
-    // Tambahkan offset +7 jam (WIB) dalam milidetik
-    const wib = new Date(now.getTime()  - (now.getTimezoneOffset() * 60 * 1000));
-    return wib;
+    // Asumsi: Server sudah dikonfigurasi ke timezone WIB
+    // Jika server di timezone lain, perlu konversi eksplisit
+    // Untuk sekarang, gunakan waktu lokal server
+    return now;
 };
 
 /**
- * Mendapatkan tanggal hari ini dalam format YYYY-MM-DD
+ * Mendapatkan tanggal hari ini dalam format YYYY-MM-DD (dalam timezone lokal server)
+ * Asumsi: Server sudah dikonfigurasi ke timezone WIB
  * @returns {string} Tanggal dalam format YYYY-MM-DD
  */
 const getTodayDate = () => {
-    const now = getWIBDate();
-    // Format YYYY-MM-DD dengan memperhatikan timezone lokal
+    // Gunakan waktu lokal server (asumsi server sudah di timezone WIB)
+    const now = new Date();
+    
+    // Format YYYY-MM-DD dari waktu lokal
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
+    
     return `${year}-${month}-${day}`;
 };
 
