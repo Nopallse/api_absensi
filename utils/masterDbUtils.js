@@ -1,6 +1,6 @@
 "use strict";
 
-const { MstPegawai, SkpdTbl, SatkerTbl, BidangTbl } = require("../models");
+const { MstPegawai, SkpdTbl, SatkerTbl, BidangTbl, Jabatan } = require("../models");
 const Sequelize = require("sequelize");
 const { Op } = Sequelize;
 
@@ -74,7 +74,12 @@ const getPegawaiByNip = async (nip) => {
         'KDPANGKAT', 'JENIS_JABATAN', 'KDJENKEL', 'TEMPATLHR', 
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF', 'NM_UNIT_KERJA'
-      ]
+      ],
+      include: [{
+        model: Jabatan,
+        as: 'jabatan',
+        attributes: ['nama_jabatan']
+      }]
     });
     return pegawai;
   } catch (error) {

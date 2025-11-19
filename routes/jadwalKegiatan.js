@@ -11,7 +11,8 @@ const {
     getJadwalKegiatanByRange,
     getLokasiKegiatan,
     addLokasiToKegiatan,
-    removeLokasiFromKegiatan
+    removeLokasiFromKegiatan,
+    downloadBulkExcelKegiatan
 } = require('../controllers/jadwalKegiatanController');
 
 const {
@@ -82,5 +83,8 @@ router.delete('/grup-peserta/:id_grup_peserta/peserta', requireAdminOpd(), remov
 
 // GET: Download Excel untuk grup peserta
 router.get('/:id_kegiatan/grup/:id_grup_peserta/download-excel', requireAdminOpd(), downloadGrupPesertaExcel);
+
+// GET: Bulk download Excel untuk seluruh grup peserta dalam kegiatan
+router.get('/:id_kegiatan/grup/download-excel', requireAdminOpd(), downloadBulkExcelKegiatan);
 
 module.exports = router; 

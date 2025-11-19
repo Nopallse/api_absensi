@@ -1,4 +1,4 @@
-const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, KehadiranKegiatan, SatkerTbl, BidangTbl, BidangSub, GrupPesertaKegiatan, PesertaGrupKegiatan } = require('../models');
+const { Kehadiran, User, Lokasi, JamDinas, JamDinasDetail, DinasSetjam, SystemSetting, MstPegawai, MasterJadwalKegiatan, JadwalKegiatanLokasiSatker, KehadiranKegiatan, SatkerTbl, BidangTbl, BidangSub, GrupPesertaKegiatan, PesertaGrupKegiatan, Jabatan } = require('../models');
 const Sequelize = require('sequelize');
 const { Op } = Sequelize;
 const { validationResult } = require('express-validator');
@@ -63,7 +63,19 @@ const createKehadiranBiasa = async(req, res) => {
         ] = await Promise.all([
             getUserFromCache(userId, () => User.findByPk(userId)),
             getLokasiFromCache(lokasi_id, () => Lokasi.findByPk(lokasi_id)),
-            cacheWrapper(kegiatanCache, `pegawai_${userNip}`, () => MstPegawai.findOne({ where: { NIP: userNip } }), 600), // Cache 10 menit
+            cacheWrapper(
+                kegiatanCache,
+                `pegawai_${userNip}`,
+                () => MstPegawai.findOne({
+                    where: { NIP: userNip },
+                    include: [{
+                        model: Jabatan,
+                        as: 'jabatan',
+                        attributes: ['nama_jabatan']
+                    }]
+                }),
+                600
+            ), // Cache 10 menit
             cacheWrapper(kegiatanCache, 'active_tipe_jadwal', () => SystemSetting.findOne({ where: { key: 'active_tipe_jadwal' } }), 1800), // Cache 30 menit
             Kehadiran.findOne({
                 where: {
@@ -160,7 +172,13 @@ const createKehadiranBiasa = async(req, res) => {
                 absen_tgljam: now,
                 absen_checkin: absenCheckin,
                 absen_apel: absenApel,
-                absen_kat: "HADIR"
+                absen_kat: "HADIR",
+                // Simpan data historis pegawai
+                NM_UNIT_KERJA: pegawai.NM_UNIT_KERJA || null,
+                KDSATKER: pegawai.KDSATKER || null,
+                BIDANGF: pegawai.BIDANGF || null,
+                SUBF: pegawai.SUBF || null,
+                nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
             });
 
             const endTime = Date.now();
@@ -196,7 +214,13 @@ const createKehadiranBiasa = async(req, res) => {
                 lokasi_id: lokasi_id,
                 absen_tgl: absenTgl,
                 absen_tgljam: now,
-                absen_kat: type
+                absen_kat: type,
+                // Simpan data historis pegawai
+                NM_UNIT_KERJA: pegawai.NM_UNIT_KERJA || null,
+                KDSATKER: pegawai.KDSATKER || null,
+                BIDANGF: pegawai.BIDANGF || null,
+                SUBF: pegawai.SUBF || null,
+                nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
             });
 
             const endTime = Date.now();
@@ -755,7 +779,7 @@ const getAllKehadiran = async (req, res) => {
             ],
             offset,
             limit,
-            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
+            attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore', 'NM_UNIT_KERJA', 'KDSATKER', 'BIDANGF', 'SUBF', 'nama_jabatan']
         });
         console.log(kehadiran);
         // Enrich kehadiran data with master employee data - Optimized
@@ -765,8 +789,14 @@ const getAllKehadiran = async (req, res) => {
             // Get employee data from master database using utility
             const pegawaiData = await getPegawaiByNip(kehadiranData.absen_nip);
             
-           
-
+            // Gunakan data historis jika ada, jika tidak gunakan data pegawai saat ini
+            const historicalData = {
+                NM_UNIT_KERJA: kehadiranData.NM_UNIT_KERJA || pegawaiData?.NM_UNIT_KERJA || null,
+                KDSATKER: kehadiranData.KDSATKER || pegawaiData?.KDSATKER || null,
+                BIDANGF: kehadiranData.BIDANGF || pegawaiData?.BIDANGF || null,
+                SUBF: kehadiranData.SUBF || pegawaiData?.SUBF || null,
+                nama_jabatan: kehadiranData.nama_jabatan || pegawaiData?.jabatan?.nama_jabatan || null,
+            };
             
             return {
                 pegawai: {
@@ -777,6 +807,8 @@ const getAllKehadiran = async (req, res) => {
                     subf: pegawaiData?.SUBF || null,
                     nm_unit_kerja: pegawaiData?.NM_UNIT_KERJA || null,
                 },
+                // Data historis dari tabel kehadiran
+                ...historicalData,
                 absen_checkin: kehadiranData.absen_checkin,
                 absen_checkout: kehadiranData.absen_checkout,
                 absen_apel: kehadiranData.absen_apel,
@@ -795,12 +827,16 @@ const getAllKehadiran = async (req, res) => {
                 let matchSatker = true;
                 let matchBidang = true;
                 
+                // Gunakan data historis jika ada, jika tidak gunakan data pegawai saat ini
+                const itemKdsatker = item.KDSATKER || item.pegawai.kdsatker;
+                const itemBidangf = item.BIDANGF || item.pegawai.bidangf;
+                
                 if (finalSatker) {
-                    matchSatker = item.pegawai.kdsatker === finalSatker;
+                    matchSatker = itemKdsatker === finalSatker;
                 }
                 
                 if (finalBidang) {
-                    matchBidang = item.pegawai.bidangf === finalBidang;
+                    matchBidang = itemBidangf === finalBidang;
                 }
                 
                 return matchSatker && matchBidang;
@@ -1275,8 +1311,9 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
         // Note: satker dan bidang filter akan diterapkan setelah enrich data
         // karena filter ini memerlukan data master pegawai
 
-        // Get attendance data with pagination
-        const { count, rows: attendances } = await Kehadiran.findAndCountAll({
+        // Get attendance data for the selected month
+        // Pagination akan diterapkan setelah proses enrich & filter
+        const attendances = await Kehadiran.findAll({
             where: whereClause,
             include: [
                 {
@@ -1290,10 +1327,9 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             ],
             order: [
                 ['absen_tgl', 'ASC'],
-                ['absen_nip', 'ASC']
+                ['absen_nip', 'ASC'],
+                ['absen_tgljam', 'ASC']
             ],
-            offset,
-            limit: parseInt(limit),
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
         });
 
@@ -1363,10 +1399,14 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             }
             
             return {
+                absen_id: attendanceData.absen_id,
                 pegawai: {
                     nip: pegawaiData?.NIP || null,
                     nama: pegawaiData?.NAMA || null
                 },
+                absen_tgl: attendanceData.absen_tgl,
+                absen_tgljam: attendanceData.absen_tgljam,
+                absen_kat: attendanceData.absen_kat,
                 absen_checkin: attendanceData.absen_checkin,
                 absen_checkout: attendanceData.absen_checkout,
                 absen_apel: attendanceData.absen_apel,
@@ -1447,12 +1487,7 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
         
         // Process enriched and filtered data for daily breakdown
         enrichedAttendances.forEach(item => {
-            // We need to get the date from the original attendance data
-            // Since we don't have absen_tgl in enriched data, we need to get it from original data
-            const originalAttendance = attendances.find(att => att.absen_nip === item.pegawai.nip);
-            if (!originalAttendance) return;
-            
-            const date = originalAttendance.absen_tgl;
+            const date = item.absen_tgl;
             
             if (!dailyBreakdown[date]) {
                 dailyBreakdown[date] = {
@@ -1487,6 +1522,10 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
             dailyBreakdown[date].total += 1;
         });
 
+        // Terapkan pagination setelah data difilter agar tidak ada data yang terlewat
+        const limitNumber = parseInt(limit);
+        const paginatedAttendances = enrichedAttendances.slice(offset, offset + limitNumber);
+
         // Convert daily breakdown to array and sort by date
         const dailyBreakdownArray = Object.values(dailyBreakdown).sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -1498,11 +1537,14 @@ const getMonthlyAttendanceByFilter = async (req, res) => {
                 period: `${selectedMonth}/${selectedYear}`,
                 summary: stats,
                 dailyBreakdown: dailyBreakdownArray,
-                pagination: {
-                    currentPage: parseInt(page),
-                    totalPages: Math.ceil(enrichedAttendances.length / parseInt(limit)),
-                    totalItems: enrichedAttendances.length,
-                    itemsPerPage: parseInt(limit)
+                records: {
+                    data: paginatedAttendances,
+                    pagination: {
+                        currentPage: parseInt(page),
+                        totalPages: Math.ceil(enrichedAttendances.length / limitNumber) || 1,
+                        totalItems: enrichedAttendances.length,
+                        itemsPerPage: limitNumber
+                    }
                 }
             }
         });
@@ -1707,6 +1749,17 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             return existingKehadiran;
         }
 
+        // Dapatkan data pegawai untuk menyimpan data historis
+        const pegawai = await MstPegawai.findOne({
+            where: { NIP: userNip },
+            attributes: ['NM_UNIT_KERJA', 'KDSATKER', 'BIDANGF', 'SUBF'],
+            include: [{
+                model: Jabatan,
+                as: 'jabatan',
+                attributes: ['nama_jabatan']
+            }]
+        });
+
         // Format waktu untuk absen_checkin (HH:MM:SS)
         const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
 
@@ -1742,7 +1795,7 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             }
         }
 
-        // Buat kehadiran biasa
+        // Buat kehadiran biasa dengan data historis
         const kehadiranBiasa = await Kehadiran.create({
             absen_nip: userNip,
             lokasi_id: lokasiId,
@@ -1751,7 +1804,13 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             absen_checkin: absenCheckin,
             absen_apel: absenApel,
             absen_sore: absenSore,
-            absen_kat: 'HADIR'
+            absen_kat: 'HADIR',
+            // Simpan data historis pegawai
+            NM_UNIT_KERJA: pegawai?.NM_UNIT_KERJA || null,
+            KDSATKER: pegawai?.KDSATKER || null,
+            BIDANGF: pegawai?.BIDANGF || null,
+            SUBF: pegawai?.SUBF || null,
+            nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
         });
 
         console.log(`Kehadiran biasa otomatis dibuat untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);

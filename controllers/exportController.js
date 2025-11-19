@@ -3,6 +3,7 @@ const { Kehadiran, User, Lokasi } = require('../models/index');
 const { Op } = require('sequelize');
 const Sequelize = require('sequelize');
 const { mapUsersWithMasterData } = require('../utils/userMasterUtils');
+const { getPegawaiByNip } = require('../utils/masterDbUtils');
 
 /**
  * Export presensi harian ke Excel
@@ -147,6 +148,11 @@ const exportPresensiHarian = async (req, res) => {
             // Try Sequelize first
             presensiData = await Kehadiran.findAll({
                 where: whereClause,
+                attributes: [
+                    'absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam',
+                    'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore',
+                    'KDSATKER', 'BIDANGF', 'SUBF', 'NM_UNIT_KERJA', 'nama_jabatan'
+                ],
                 include: [
                     {
                         model: User,
@@ -165,6 +171,41 @@ const exportPresensiHarian = async (req, res) => {
                     ['absen_tgljam', 'ASC']
                 ]
             });
+            
+            // Enrich dengan data master jika tidak ada data historis
+            presensiData = await Promise.all(presensiData.map(async (item) => {
+                const kehadiranData = item.toJSON();
+                
+                // Ambil data master jika tidak ada data historis
+                let kdsatker = kehadiranData.KDSATKER;
+                let bidangf = kehadiranData.BIDANGF;
+                let subf = kehadiranData.SUBF;
+                let nmUnitKerja = kehadiranData.NM_UNIT_KERJA;
+                let namaJabatan = kehadiranData.nama_jabatan;
+                
+                // Jika tidak ada data historis, ambil dari master data
+                if (!kdsatker || !bidangf || !subf || !nmUnitKerja || !namaJabatan) {
+                    const pegawaiData = await getPegawaiByNip(kehadiranData.absen_nip);
+                    if (pegawaiData) {
+                        kdsatker = kdsatker || pegawaiData.KDSATKER || null;
+                        bidangf = bidangf || pegawaiData.BIDANGF || null;
+                        subf = subf || pegawaiData.SUBF || null;
+                        nmUnitKerja = nmUnitKerja || pegawaiData.NM_UNIT_KERJA || null;
+                        namaJabatan = namaJabatan || (pegawaiData.jabatan?.nama_jabatan) || null;
+                    }
+                }
+                
+                return {
+                    dataValues: {
+                        ...kehadiranData,
+                        KDSATKER: kdsatker,
+                        BIDANGF: bidangf,
+                        SUBF: subf,
+                        NM_UNIT_KERJA: nmUnitKerja,
+                        nama_jabatan: namaJabatan
+                    }
+                };
+            }));
             
             console.log('Sequelize query results:', presensiData.length);
             
@@ -227,7 +268,13 @@ const exportPresensiHarian = async (req, res) => {
                         absen_kat: row.absen_kat,
                         absen_apel: row.absen_apel,
                         absen_sore: row.absen_sore,
-                        User: row.username ? {
+                        // Data historis dari tabel kehadiran
+                        KDSATKER: row.KDSATKER || null,
+                        BIDANGF: row.BIDANGF || null,
+                        SUBF: row.SUBF || null,
+                        NM_UNIT_KERJA: row.NM_UNIT_KERJA || null,
+                        nama_jabatan: row.nama_jabatan || null,
+                         User: row.username ? {
                             username: row.username,
                             email: row.email,
                             level: row.level
@@ -260,11 +307,36 @@ const exportPresensiHarian = async (req, res) => {
                 });
 
                 // Combine presensi data with master data
-                presensiData = rawPresensiData.map(presensi => {
+                presensiData = await Promise.all(rawPresensiData.map(async (presensi) => {
                     const masterData = masterDataMap.get(presensi.dataValues.absen_nip);
+                    
+                    // Ambil data master jika tidak ada data historis
+                    let kdsatker = presensi.dataValues.KDSATKER;
+                    let bidangf = presensi.dataValues.BIDANGF;
+                    let subf = presensi.dataValues.SUBF;
+                    let nmUnitKerja = presensi.dataValues.NM_UNIT_KERJA;
+                    let namaJabatan = presensi.dataValues.nama_jabatan;
+                    
+                    // Jika tidak ada data historis, ambil dari master data
+                    if (!kdsatker || !bidangf || !subf || !nmUnitKerja || !namaJabatan) {
+                        const pegawaiData = await getPegawaiByNip(presensi.dataValues.absen_nip);
+                        if (pegawaiData) {
+                            kdsatker = kdsatker || pegawaiData.KDSATKER || null;
+                            bidangf = bidangf || pegawaiData.BIDANGF || null;
+                            subf = subf || pegawaiData.SUBF || null;
+                            nmUnitKerja = nmUnitKerja || pegawaiData.NM_UNIT_KERJA || null;
+                            namaJabatan = namaJabatan || (pegawaiData.jabatan?.nama_jabatan) || null;
+                        }
+                    }
+                    
                     return {
                         dataValues: {
                             ...presensi.dataValues,
+                            KDSATKER: kdsatker,
+                            BIDANGF: bidangf,
+                            SUBF: subf,
+                            NM_UNIT_KERJA: nmUnitKerja,
+                            nama_jabatan: namaJabatan,
                             User: presensi.dataValues.User ? {
                                 ...presensi.dataValues.User,
                                 nama: masterData?.nama || presensi.dataValues.User.username,
@@ -272,7 +344,7 @@ const exportPresensiHarian = async (req, res) => {
                             } : null
                         }
                     };
-                });
+                }));
                 
                 console.log('Converted raw data results:', presensiData.length);
             }
@@ -320,6 +392,11 @@ const exportPresensiHarian = async (req, res) => {
             { header: 'Nama', key: 'nama', width: 30 },
             { header: 'Email', key: 'email', width: 30 },
             { header: 'Level', key: 'level', width: 10 },
+            { header: 'KDSATKER', key: 'kdsatker', width: 15 },
+            { header: 'BIDANGF', key: 'bidangf', width: 15 },
+            { header: 'SUBF', key: 'subf', width: 15 },
+            { header: 'Nama Unit Kerja', key: 'nm_unit_kerja', width: 40 },
+            { header: 'Jabatan', key: 'jabatan', width: 30 },
             { header: 'Tanggal', key: 'tanggal', width: 15 },
             { header: 'Jam Absen', key: 'jam_absen', width: 15 },
             { header: 'Check In', key: 'checkin', width: 15 },
@@ -353,6 +430,11 @@ const exportPresensiHarian = async (req, res) => {
                 nama: data.User?.nama || data.User?.username || '-',
                 email: data.User?.email || '-',
                 level: data.User?.level || '-',
+                kdsatker: data.KDSATKER || '-',
+                bidangf: data.BIDANGF || '-',
+                subf: data.SUBF || '-',
+                nm_unit_kerja: data.NM_UNIT_KERJA || '-',
+                jabatan: data.nama_jabatan || '-',
                 tanggal: data.absen_tgl || '-',
                 jam_absen: data.absen_tgljam ? new Date(data.absen_tgljam).toLocaleTimeString('id-ID') : '-',
                 checkin: data.absen_checkin ? data.absen_checkin : '-',
@@ -384,6 +466,11 @@ const exportPresensiHarian = async (req, res) => {
                 nama: 'TIDAK ADA DATA',
                 email: 'Untuk tanggal yang dipilih',
                 level: '-',
+                kdsatker: '-',
+                bidangf: '-',
+                subf: '-',
+                nm_unit_kerja: '-',
+                jabatan: '-',
                 tanggal: '-',
                 jam_absen: '-',
                 checkin: '-',

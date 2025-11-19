@@ -33,6 +33,9 @@ fs
 const mstPegawaiModel = require('./mstpegawai.js')(masterSequelize, Sequelize.DataTypes);
 db[mstPegawaiModel.name] = mstPegawaiModel;
 
+const jabatanModel = require('./jabatan.js')(masterSequelize, Sequelize.DataTypes);
+db[jabatanModel.name] = jabatanModel;
+
 const satkerTblModel = require('./satker_tbl.js')(masterSequelize, Sequelize.DataTypes);
 db[satkerTblModel.name] = satkerTblModel;
 

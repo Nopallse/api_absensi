@@ -50,6 +50,36 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW
+      },
+      NM_UNIT_KERJA: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'NM_UNIT_KERJA',
+        comment: 'Nama unit kerja peserta saat ditambahkan (data historis)'
+      },
+      KDSATKER: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        field: 'KDSATKER',
+        comment: 'Kode satker peserta saat ditambahkan (data historis)'
+      },
+      BIDANGF: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'BIDANGF',
+        comment: 'Kode bidang peserta saat ditambahkan (data historis)'
+      },
+      SUBF: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'SUBF',
+        comment: 'Kode sub bidang peserta saat ditambahkan (data historis)'
+      },
+      nama_jabatan: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'nama_jabatan',
+        comment: 'Nama jabatan peserta saat ditambahkan (data historis)'
       }
     },
     {

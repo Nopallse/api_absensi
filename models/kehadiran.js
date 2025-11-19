@@ -80,6 +80,36 @@ module.exports = (sequelize, DataTypes) => {
           isIn: [['HAS', 'CP']]
         }
       },
+      NM_UNIT_KERJA: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'NM_UNIT_KERJA',
+        comment: 'Nama unit kerja pegawai saat melakukan kehadiran (data historis)'
+      },
+      KDSATKER: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        field: 'KDSATKER',
+        comment: 'Kode satker pegawai saat melakukan kehadiran (data historis)'
+      },
+      BIDANGF: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'BIDANGF',
+        comment: 'Kode bidang pegawai saat melakukan kehadiran (data historis)'
+      },
+      SUBF: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'SUBF',
+        comment: 'Kode sub bidang pegawai saat melakukan kehadiran (data historis)'
+      },
+      nama_jabatan: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'nama_jabatan',
+        comment: 'Nama jabatan pegawai saat melakukan kehadiran (data historis)'
+      },
     },
     {
       sequelize,

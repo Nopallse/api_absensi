@@ -1,4 +1,4 @@
-const { GrupPesertaKegiatan, PesertaGrupKegiatan, MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, MstPegawai, SatkerTbl, KehadiranKegiatan } = require('../models');
+const { GrupPesertaKegiatan, PesertaGrupKegiatan, MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, MstPegawai, SatkerTbl, KehadiranKegiatan, Jabatan } = require('../models');
 const { Op, Sequelize } = require('sequelize');
 const ExcelJS = require('exceljs');
 const multer = require('multer');
@@ -266,7 +266,12 @@ const createGrupPeserta = async (req, res) => {
               KDSATKER: id_satker,
               STATUSAKTIF: 'AKTIF'
             },
-            attributes: ['NIP', 'KDSATKER']
+            attributes: ['NIP', 'KDSATKER', 'NM_UNIT_KERJA', 'BIDANGF', 'SUBF'],
+            include: [{
+              model: Jabatan,
+              as: 'jabatan',
+              attributes: ['nama_jabatan']
+            }]
           });
           
           const nipList = pegawaiSatker.map(p => p.NIP);
@@ -317,7 +322,12 @@ const createGrupPeserta = async (req, res) => {
                 // Tambahkan peserta ke grup
                 const peserta = await PesertaGrupKegiatan.create({
                   id_grup_peserta: newGrup.id_grup_peserta,
-                  nip: nip
+                  nip: nip,
+                  NM_UNIT_KERJA: pegawai?.NM_UNIT_KERJA || null,
+                  KDSATKER: pegawai?.KDSATKER || null,
+                  BIDANGF: pegawai?.BIDANGF || null,
+                  SUBF: pegawai?.SUBF || null,
+                  nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
                 }, { transaction });
                 
                 // Sync ke jadwal_kegiatan_lokasi_satker
@@ -468,7 +478,7 @@ const getPesertaGrup = async (req, res) => {
     
     const pesertaList = await PesertaGrupKegiatan.findAll({
       where: { id_grup_peserta: parseInt(id_grup_peserta) },
-      attributes: ['id', 'nip', 'created_at']
+      attributes: ['id', 'nip', 'created_at', 'NM_UNIT_KERJA', 'KDSATKER', 'BIDANGF', 'SUBF', 'nama_jabatan']
     });
     
     // Dapatkan data pegawai untuk setiap NIP
@@ -497,7 +507,12 @@ const getPesertaGrup = async (req, res) => {
       id: p.id,
       nip: p.nip,
       pegawai: pegawaiMap[p.nip] || null,
-      created_at: p.created_at
+      created_at: p.created_at,
+      NM_UNIT_KERJA: p.NM_UNIT_KERJA,
+      KDSATKER: p.KDSATKER,
+      BIDANGF: p.BIDANGF,
+      SUBF: p.SUBF,
+      nama_jabatan: p.nama_jabatan
     }));
     
     res.status(200).json({
@@ -554,7 +569,12 @@ const addPesertaToGrup = async (req, res) => {
             KDSATKER: grup.id_satker,
             STATUSAKTIF: 'AKTIF'
           },
-          attributes: ['NIP']
+          attributes: ['NIP', 'KDSATKER', 'NM_UNIT_KERJA', 'BIDANGF', 'SUBF'],
+          include: [{
+            model: Jabatan,
+            as: 'jabatan',
+            attributes: ['nama_jabatan']
+          }]
         });
         
         nipToAdd = pegawaiSatker.map(p => p.NIP);
@@ -604,7 +624,12 @@ const addPesertaToGrup = async (req, res) => {
               NIP: nip,
               STATUSAKTIF: 'AKTIF'
             },
-            attributes: ['NIP', 'KDSATKER']
+            attributes: ['NIP', 'KDSATKER', 'NM_UNIT_KERJA', 'BIDANGF', 'SUBF'],
+            include: [{
+              model: Jabatan,
+              as: 'jabatan',
+              attributes: ['nama_jabatan']
+            }]
           });
           
           if (!pegawai) {
@@ -615,7 +640,12 @@ const addPesertaToGrup = async (req, res) => {
           // Tambahkan peserta ke grup
           const peserta = await PesertaGrupKegiatan.create({
             id_grup_peserta: parseInt(id_grup_peserta),
-            nip: nip
+            nip: nip,
+            NM_UNIT_KERJA: pegawai?.NM_UNIT_KERJA || null,
+            KDSATKER: pegawai?.KDSATKER || null,
+            BIDANGF: pegawai?.BIDANGF || null,
+            SUBF: pegawai?.SUBF || null,
+            nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
           }, { transaction });
           
           // Sync ke jadwal_kegiatan_lokasi_satker
@@ -770,7 +800,12 @@ const importPesertaFromExcel = async (req, res) => {
               NIP: nip,
               STATUSAKTIF: 'AKTIF'
             },
-            attributes: ['NIP', 'KDSATKER']
+            attributes: ['NIP', 'KDSATKER', 'NM_UNIT_KERJA', 'BIDANGF', 'SUBF'],
+            include: [{
+              model: Jabatan,
+              as: 'jabatan',
+              attributes: ['nama_jabatan']
+            }]
           });
           
           if (!pegawai) {
@@ -781,7 +816,12 @@ const importPesertaFromExcel = async (req, res) => {
           // Tambahkan peserta ke grup
           const peserta = await PesertaGrupKegiatan.create({
             id_grup_peserta: parseInt(id_grup_peserta),
-            nip: nip
+            nip: nip,
+            NM_UNIT_KERJA: pegawai?.NM_UNIT_KERJA || null,
+            KDSATKER: pegawai?.KDSATKER || null,
+            BIDANGF: pegawai?.BIDANGF || null,
+            SUBF: pegawai?.SUBF || null,
+            nama_jabatan: pegawai?.jabatan?.nama_jabatan || null
           }, { transaction });
           
           // Sync ke jadwal_kegiatan_lokasi_satker
@@ -1067,7 +1107,7 @@ const getDetailGrupPesertaKegiatan = async (req, res) => {
     // Ambil semua peserta dalam grup
     const pesertaList = await PesertaGrupKegiatan.findAll({
       where: { id_grup_peserta: parseInt(id_grup_peserta) },
-      attributes: ['id', 'nip', 'created_at']
+      attributes: ['id', 'nip', 'created_at', 'NM_UNIT_KERJA', 'KDSATKER', 'BIDANGF', 'SUBF', 'nama_jabatan']
     });
     
     // Dapatkan data pegawai untuk setiap NIP
@@ -1123,7 +1163,12 @@ const getDetailGrupPesertaKegiatan = async (req, res) => {
         nama: pegawai.nama,
         nama_lengkap: pegawai.nama_lengkap,
         hadir: kehadiran !== null,
-        kehadiran_data: kehadiran
+        kehadiran_data: kehadiran,
+        NM_UNIT_KERJA: p.NM_UNIT_KERJA,
+        KDSATKER: p.KDSATKER,
+        BIDANGF: p.BIDANGF,
+        SUBF: p.SUBF,
+        nama_jabatan: p.nama_jabatan
       };
     });
     
@@ -1227,7 +1272,12 @@ const downloadGrupPesertaExcel = async (req, res) => {
         NIP: { [Op.in]: nipList },
         STATUSAKTIF: 'AKTIF'
       },
-      attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER']
+      attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER', 'BIDANGF', 'SUBF', 'NM_UNIT_KERJA'],
+      include: [{
+        model: Jabatan,
+        as: 'jabatan',
+        attributes: ['nama_jabatan']
+      }]
     });
 
     // Dapatkan data kehadiran untuk kegiatan ini
@@ -1258,7 +1308,11 @@ const downloadGrupPesertaExcel = async (req, res) => {
         gelar_depan: p.GLRDEPAN || '',
         gelar_belakang: p.GLRBELAKANG || '',
         nama_lengkap: `${p.GLRDEPAN || ''} ${p.NAMA} ${p.GLRBELAKANG || ''}`.trim(),
-        kdsatker: p.KDSATKER
+        kdsatker: p.KDSATKER || null,
+        bidangf: p.BIDANGF || null,
+        subf: p.SUBF || null,
+        nm_unit_kerja: p.NM_UNIT_KERJA || null,
+        nama_jabatan: p.jabatan?.nama_jabatan || null
       };
     });
 
@@ -1270,16 +1324,31 @@ const downloadGrupPesertaExcel = async (req, res) => {
         nama_lengkap: p.nip,
         gelar_depan: '',
         gelar_belakang: '',
-        kdsatker: null
+        kdsatker: null,
+        bidangf: null,
+        subf: null,
+        nm_unit_kerja: null,
+        nama_jabatan: null
       };
       const kehadiran = kehadiranMap[p.nip] || null;
+
+      // Format unit kerja ID
+      const kdsatker = pegawai.kdsatker || '-';
+      const bidangf = pegawai.bidangf || '-';
+      const subf = pegawai.subf || null;
+      const unitKerjaId = subf 
+        ? `${kdsatker}/${bidangf}/${subf}` 
+        : `${kdsatker}/${bidangf}`;
 
       return {
         nip: pegawai.nip,
         nama: pegawai.nama,
         nama_lengkap: pegawai.nama_lengkap,
         hadir: kehadiran !== null,
-        kehadiran_data: kehadiran
+        kehadiran_data: kehadiran,
+        unit_kerja_id: unitKerjaId,
+        nm_unit_kerja: pegawai.nm_unit_kerja || '-',
+        nama_jabatan: pegawai.nama_jabatan || '-'
       };
     });
 
@@ -1333,12 +1402,12 @@ const downloadGrupPesertaExcel = async (req, res) => {
     worksheet.addRow([]);
 
     // Set header tabel
-    worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Status Kehadiran', 'Waktu Kehadiran']);
+    worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Unit Kerja', 'Nama Unit Kerja', 'Jabatan', 'Status Kehadiran', 'Waktu Kehadiran']);
 
     // Style header tabel
     const headerRow = worksheet.lastRow;
     headerRow.font = { bold: true };
-    for (let col = 2; col <= 6; col++) {
+    for (let col = 2; col <= 9; col++) {
       const cell = headerRow.getCell(col);
       cell.fill = {
         type: 'pattern',
@@ -1357,9 +1426,12 @@ const downloadGrupPesertaExcel = async (req, res) => {
     worksheet.getColumn(1).width = 3;   // Space/Empty column
     worksheet.getColumn(2).width = 5;   // No
     worksheet.getColumn(3).width = 20;  // NIP
-    worksheet.getColumn(4).width = 50;  // Nama Lengkap
-    worksheet.getColumn(5).width = 20;  // Status Kehadiran
-    worksheet.getColumn(6).width = 20;  // Waktu Kehadiran
+    worksheet.getColumn(4).width = 40;  // Nama Lengkap
+    worksheet.getColumn(5).width = 20;  // Unit Kerja
+    worksheet.getColumn(6).width = 40;  // Nama Unit Kerja
+    worksheet.getColumn(7).width = 30;  // Jabatan
+    worksheet.getColumn(8).width = 18;  // Status Kehadiran
+    worksheet.getColumn(9).width = 18;  // Waktu Kehadiran
 
     // Tambahkan data
     pegawaiWithAttendance.forEach((pegawai, index) => {
@@ -1375,6 +1447,9 @@ const downloadGrupPesertaExcel = async (req, res) => {
         index + 1,
         pegawai.nip,
         pegawai.nama_lengkap,
+        pegawai.unit_kerja_id,
+        pegawai.nm_unit_kerja,
+        pegawai.nama_jabatan,
         pegawai.hadir ? 'Hadir' : 'Tidak Hadir',
         waktuKehadiran
       ]);
@@ -1384,10 +1459,10 @@ const downloadGrupPesertaExcel = async (req, res) => {
         ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDFFFE0' } } // light green
         : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } }; // light red
 
-      dataRow.getCell(5).fill = fillColor;
+      dataRow.getCell(8).fill = fillColor;
 
       // Tambahkan border pada setiap cell di row data
-      for (let col = 2; col <= 6; col++) {
+      for (let col = 2; col <= 9; col++) {
         const cell = dataRow.getCell(col);
         cell.border = {
           top: { style: 'thin' },
@@ -1420,6 +1495,8 @@ const downloadGrupPesertaExcel = async (req, res) => {
     });
   }
 };
+
+
 
 module.exports = {
   getAllGrupPeserta,

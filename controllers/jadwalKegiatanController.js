@@ -1,4 +1,4 @@
-const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, SatkerTbl, MstPegawai, KehadiranKegiatan, User, GrupPesertaKegiatan, PesertaGrupKegiatan } = require('../models');
+const { MasterJadwalKegiatan, Lokasi, JadwalKegiatanLokasiSatker, SatkerTbl, MstPegawai, KehadiranKegiatan, User, GrupPesertaKegiatan, PesertaGrupKegiatan, Jabatan } = require('../models');
 const { Op, Sequelize } = require('sequelize');
 const ExcelJS = require('exceljs');
 const { getTodayDate } = require('../utils/timeUtils');
@@ -285,40 +285,87 @@ const getJadwalKegiatanById = async (req, res) => {
             });
         }
         
-        // Dapatkan data Satker dan NIP untuk setiap lokasi
-        const lokasiWithSatker = [];
-        if (jadwal.Lokasis && jadwal.Lokasis.length > 0) {
-            for (const lokasi of jadwal.Lokasis) {
-                const pesertaList = await JadwalKegiatanLokasiSatker.findAll({
-                    where: {
-                        id_kegiatan: id_kegiatan,
-                        lokasi_id: lokasi.lokasi_id
-                    },
-                    attributes: ['id_satker', 'nip']
-                });
-                
-                // Dapatkan unique satker dan NIP
-                const satkerSet = new Set();
-                const nipSet = new Set();
-                
-                pesertaList.forEach(p => {
-                    if (p.id_satker) {
-                        satkerSet.add(p.id_satker);
-                    }
-                    if (p.nip) {
-                        nipSet.add(p.nip);
-                    }
-                });
-                
-                const satkerList = Array.from(satkerSet);
-                const nipList = Array.from(nipSet);
-                
-                lokasiWithSatker.push({
-                    ...lokasi.toJSON(),
-                    satker_list: satkerList, // Unique satker yang terlibat
-                    nip_list: nipList.length > 0 ? nipList : undefined // Unique NIP yang terlibat
-                });
+        // Dapatkan data lokasi tambahan dari grup peserta (jika ada)
+        const grupLokasiList = await GrupPesertaKegiatan.findAll({
+            where: {
+                id_kegiatan: parseInt(id_kegiatan)
+            },
+            include: [
+                {
+                    model: Lokasi,
+                    attributes: ['lokasi_id', 'lat', 'lng', 'ket', 'status', 'range']
+                }
+            ]
+        });
+
+        // Gabungkan semua lokasi (langsung & via grup) sambil hindari duplikasi
+        const lokasiMap = new Map();
+        const registerLokasi = (lokasiInstance) => {
+            if (!lokasiInstance) {
+                return;
             }
+            const plainLokasi = typeof lokasiInstance.toJSON === 'function'
+                ? lokasiInstance.toJSON()
+                : lokasiInstance;
+            if (!plainLokasi.lokasi_id) {
+                return;
+            }
+            if (!lokasiMap.has(plainLokasi.lokasi_id)) {
+                lokasiMap.set(plainLokasi.lokasi_id, plainLokasi);
+            }
+        };
+
+        if (jadwal.Lokasis && jadwal.Lokasis.length > 0) {
+            jadwal.Lokasis.forEach(registerLokasi);
+        }
+        if (grupLokasiList && grupLokasiList.length > 0) {
+            grupLokasiList.forEach(grup => registerLokasi(grup.Lokasi));
+        }
+
+        const lokasiIds = Array.from(lokasiMap.keys());
+
+        // Dapatkan data Satker dan NIP untuk setiap lokasi
+        let lokasiWithSatker = [];
+        if (lokasiIds.length > 0) {
+            const pesertaList = await JadwalKegiatanLokasiSatker.findAll({
+                where: {
+                    id_kegiatan: id_kegiatan,
+                    lokasi_id: { [Op.in]: lokasiIds }
+                },
+                attributes: ['lokasi_id', 'id_satker', 'nip']
+            });
+
+            const lokasiSatkerMap = new Map();
+            pesertaList.forEach(p => {
+                const locId = p.lokasi_id;
+                if (!locId) {
+                    return;
+                }
+                if (!lokasiSatkerMap.has(locId)) {
+                    lokasiSatkerMap.set(locId, { satkerSet: new Set(), nipSet: new Set() });
+                }
+                const entry = lokasiSatkerMap.get(locId);
+                if (p.id_satker) {
+                    entry.satkerSet.add(p.id_satker);
+                }
+                if (p.nip) {
+                    entry.nipSet.add(p.nip);
+                }
+            });
+
+            lokasiWithSatker = Array.from(lokasiMap.values()).map(lokasi => {
+                const satkerInfo = lokasiSatkerMap.get(lokasi.lokasi_id);
+                const satkerList = satkerInfo ? Array.from(satkerInfo.satkerSet) : [];
+                const nipList = satkerInfo && satkerInfo.nipSet.size > 0
+                    ? Array.from(satkerInfo.nipSet)
+                    : undefined;
+
+                return {
+                    ...lokasi,
+                    satker_list: satkerList,
+                    nip_list: nipList
+                };
+            });
         }
         
         res.status(200).json({
@@ -1854,7 +1901,12 @@ const downloadBulkExcelKegiatan = async (req, res) => {
                     NIP: { [Op.in]: nipList },
                     STATUSAKTIF: 'AKTIF'
                 },
-                attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER']
+                attributes: ['NIP', 'NAMA', 'GLRDEPAN', 'GLRBELAKANG', 'KDSATKER', 'BIDANGF', 'SUBF', 'NM_UNIT_KERJA'],
+                include: [{
+                    model: Jabatan,
+                    as: 'jabatan',
+                    attributes: ['nama_jabatan']
+                }]
             });
 
             // Dapatkan data kehadiran untuk kegiatan ini
@@ -1885,7 +1937,11 @@ const downloadBulkExcelKegiatan = async (req, res) => {
                     gelar_depan: p.GLRDEPAN || '',
                     gelar_belakang: p.GLRBELAKANG || '',
                     nama_lengkap: `${p.GLRDEPAN || ''} ${p.NAMA} ${p.GLRBELAKANG || ''}`.trim(),
-                    kdsatker: p.KDSATKER
+                    kdsatker: p.KDSATKER || null,
+                    bidangf: p.BIDANGF || null,
+                    subf: p.SUBF || null,
+                    nm_unit_kerja: p.NM_UNIT_KERJA || null,
+                    nama_jabatan: p.jabatan?.nama_jabatan || null
                 };
             });
 
@@ -1897,16 +1953,30 @@ const downloadBulkExcelKegiatan = async (req, res) => {
                     nama_lengkap: p.nip,
                     gelar_depan: '',
                     gelar_belakang: '',
-                    kdsatker: null
+                    kdsatker: null,
+                    bidangf: null,
+                    subf: null,
+                    nm_unit_kerja: null,
+                    nama_jabatan: null
                 };
                 const kehadiran = kehadiranMap[p.nip] || null;
+
+                const kdsatker = pegawai.kdsatker || '-';
+                const bidangf = pegawai.bidangf || '-';
+                const subf = pegawai.subf || null;
+                const unitKerjaId = subf
+                    ? `${kdsatker}/${bidangf}/${subf}`
+                    : `${kdsatker}/${bidangf}`;
 
                 return {
                     nip: pegawai.nip,
                     nama: pegawai.nama,
                     nama_lengkap: pegawai.nama_lengkap,
                     hadir: kehadiran !== null,
-                    kehadiran_data: kehadiran
+                    kehadiran_data: kehadiran,
+                    unit_kerja_id: unitKerjaId,
+                    nm_unit_kerja: pegawai.nm_unit_kerja || '-',
+                    nama_jabatan: pegawai.nama_jabatan || '-'
                 };
             });
 
@@ -1977,12 +2047,12 @@ const downloadBulkExcelKegiatan = async (req, res) => {
             worksheet.addRow([]);
 
             // Set header tabel
-            worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Status Kehadiran', 'Waktu Kehadiran']);
+            worksheet.addRow(['', 'No', 'NIP', 'Nama Lengkap', 'Unit Kerja', 'Nama Unit Kerja', 'Jabatan', 'Status Kehadiran', 'Waktu Kehadiran']);
 
             // Style header tabel
             const headerRow = worksheet.lastRow;
             headerRow.font = { bold: true };
-            for (let col = 2; col <= 6; col++) {
+            for (let col = 2; col <= 9; col++) {
                 const cell = headerRow.getCell(col);
                 cell.fill = {
                     type: 'pattern',
@@ -2001,9 +2071,12 @@ const downloadBulkExcelKegiatan = async (req, res) => {
             worksheet.getColumn(1).width = 3;   // Space/Empty column
             worksheet.getColumn(2).width = 5;   // No
             worksheet.getColumn(3).width = 20;  // NIP
-            worksheet.getColumn(4).width = 50;  // Nama Lengkap
-            worksheet.getColumn(5).width = 20;  // Status Kehadiran
-            worksheet.getColumn(6).width = 20;  // Waktu Kehadiran
+            worksheet.getColumn(4).width = 40;  // Nama Lengkap
+            worksheet.getColumn(5).width = 20;  // Unit Kerja
+            worksheet.getColumn(6).width = 40;  // Nama Unit Kerja
+            worksheet.getColumn(7).width = 30;  // Jabatan
+            worksheet.getColumn(8).width = 18;  // Status Kehadiran
+            worksheet.getColumn(9).width = 18;  // Waktu Kehadiran
 
             // Tambahkan data
             pegawaiWithAttendance.forEach((pegawai, index) => {
@@ -2019,6 +2092,9 @@ const downloadBulkExcelKegiatan = async (req, res) => {
                     index + 1,
                     pegawai.nip,
                     pegawai.nama_lengkap,
+                    pegawai.unit_kerja_id,
+                    pegawai.nm_unit_kerja,
+                    pegawai.nama_jabatan,
                     pegawai.hadir ? 'Hadir' : 'Tidak Hadir',
                     waktuKehadiran
                 ]);
@@ -2028,10 +2104,10 @@ const downloadBulkExcelKegiatan = async (req, res) => {
                     ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDFFFE0' } } // light green
                     : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } }; // light red
 
-                dataRow.getCell(5).fill = fillColor;
+                dataRow.getCell(8).fill = fillColor;
 
                 // Tambahkan border pada setiap cell di row data
-                for (let col = 2; col <= 6; col++) {
+                for (let col = 2; col <= 9; col++) {
                     const cell = dataRow.getCell(col);
                     cell.border = {
                         top: { style: 'thin' },

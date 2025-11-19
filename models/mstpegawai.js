@@ -16,6 +16,15 @@ module.exports = (sequelize, DataTypes) => {
         targetKey: 'nm_unit_kerja',
         as: 'unitKerja'
       });
+
+      // Relasi dengan tabel jabatan untuk mendapatkan nama jabatan
+      if (models.Jabatan) {
+        MstPegawai.belongsTo(models.Jabatan, {
+          foreignKey: 'KODE_JABATAN',
+          targetKey: 'kode_jabatan',
+          as: 'jabatan'
+        });
+      }
     }
   }
 
