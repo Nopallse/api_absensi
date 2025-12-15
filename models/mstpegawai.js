@@ -18,13 +18,13 @@ module.exports = (sequelize, DataTypes) => {
       });
 
       // Relasi dengan tabel jabatan untuk mendapatkan nama jabatan
-      // if (models.Jabatan) {
-      //   MstPegawai.belongsTo(models.Jabatan, {
-      //     foreignKey: 'KODE_JABATAN',
-      //     targetKey: 'kode_jabatan',
-      //     as: 'jabatan'
-      //   });
-      // }
+      if (models.Jabatan) {
+        MstPegawai.belongsTo(models.Jabatan, {
+          foreignKey: 'KODE_JABATAN',
+          targetKey: 'kode_jabatan',
+          as: 'jabatan'
+        });
+      }
     }
   }
 

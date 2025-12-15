@@ -75,11 +75,11 @@ const getPegawaiByNip = async (nip) => {
         'TGLLHR', 'AGAMA', 'ALAMAT', 'NOTELP', 'NOKTP', 
         'EMAIL', 'FOTO', 'JENIS_PEGAWAI', 'STATUSAKTIF', 'NM_UNIT_KERJA'
       ],
-      // include: [{
-      //   model: Jabatan,
-      //   as: 'jabatan',
-      //   attributes: ['nama_jabatan']
-      // }]
+      include: [{
+        model: Jabatan,
+        as: 'jabatan',
+        attributes: ['nama_jabatan']
+      }]
     });
     return pegawai;
   } catch (error) {

@@ -68,11 +68,11 @@ const createKehadiranBiasa = async(req, res) => {
                 `pegawai_${userNip}`,
                 () => MstPegawai.findOne({
                     where: { NIP: userNip },
-                    // include: [{
-                    //     model: Jabatan,
-                    //     as: 'jabatan',
-                    //     attributes: ['nama_jabatan']
-                    // }]
+                    include: [{
+                        model: Jabatan,
+                        as: 'jabatan',
+                        attributes: ['nama_jabatan']
+                    }]
                 }),
                 600
             ), // Cache 10 menit
@@ -1753,11 +1753,11 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
         const pegawai = await MstPegawai.findOne({
             where: { NIP: userNip },
             attributes: ['NM_UNIT_KERJA', 'KDSATKER', 'BIDANGF', 'SUBF'],
-            // include: [{
-            //     model: Jabatan,
-            //     as: 'jabatan',
-            //     attributes: ['nama_jabatan']
-            // }]
+            include: [{
+                model: Jabatan,
+                as: 'jabatan',
+                attributes: ['nama_jabatan']
+            }]
         });
 
         // Format waktu untuk absen_checkin (HH:MM:SS)
