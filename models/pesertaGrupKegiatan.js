@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'nip',
         targetKey: 'username',
         as: 'pegawai',
+        constraints: false, // Tidak buat foreign key constraint di database
         required: false
       });
     }
@@ -39,7 +40,8 @@ module.exports = (sequelize, DataTypes) => {
       nip: {
         type: DataTypes.STRING(30),
         allowNull: false,
-        comment: 'NIP pegawai yang menjadi peserta dalam grup'
+        comment: 'NIP pegawai yang menjadi peserta dalam grup',
+        references: null // Hapus foreign key constraint, hanya relasi logis via association
       },
       created_at: {
         type: DataTypes.DATE,

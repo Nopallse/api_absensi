@@ -1,43 +1,9 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const { generateTokens, verifyRefreshToken } = require("../utils/jwtUtils");
 const { User, AdmOpd, AdmUpt, DeviceResetRequest } = require("../models/index");
 const { SatkerTbl, BidangTbl } = require("../models/index");
 const { Op } = require("sequelize");
-
-const register = async (req, res) => {
-  try {
-    const { username, email, password, level, id_opd, id_upt, status } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const auth_key = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-    const user = await User.create({
-      username,
-      email,
-      password_hash: hashedPassword,
-      auth_key,
-      level: level || 'user',
-      id_opd,
-      id_upt,
-      status: status || 'active',
-      device_id: null
-    });
-
-    res.status(201).json({
-      message: "User berhasil didaftarkan",
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        level: user.level,
-        status: user.status
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
 
 const login = async (req, res) => {
   try {
@@ -414,64 +380,6 @@ const logout = async (req, res) => {
   }
 };
 
-// Logout from all devices
-const logoutAll = async (req, res) => {
-  try {
-    const userId = req.user.id; // Dari JWT middleware
-
-    // Hapus semua refresh token untuk user ini
-    await User.update(
-      { refresh_token: null },
-      { where: { id: userId } }
-    );
-
-    res.json({
-      message: "Logout dari semua perangkat berhasil"
-    });
-
-  } catch (error) {
-    console.error('Logout All Error:', error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-// Force logout user (untuk admin atau sistem)
-const forceLogoutUser = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    if (!userId) {
-      return res.status(400).json({
-        error: "User ID diperlukan",
-        code: "USER_ID_REQUIRED"
-      });
-    }
-
-    // Cek apakah user ada
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({
-        error: "User tidak ditemukan",
-        code: "USER_NOT_FOUND"
-      });
-    }
-
-    // Hapus refresh token dan reset device_id
-    await user.update({
-      refresh_token: null,
-      device_id: null
-    });
-
-    res.json({
-      message: "User berhasil di-logout paksa dari semua perangkat",
-      success: true
-    });
-
-  } catch (error) {
-    console.error('Force Logout User Error:', error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
 
 const checkResetRequest = async (req, res) => {
   try {
@@ -524,4 +432,4 @@ const checkResetRequest = async (req, res) => {
   }
 };
 
-module.exports = { register, login, loginAdmin, refreshToken, logout, logoutAll, forceLogoutUser, checkResetRequest };
+module.exports = { login, loginAdmin, refreshToken, logout,checkResetRequest };

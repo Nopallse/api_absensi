@@ -122,7 +122,6 @@ const requestDeviceReset = async (req, res) => {
   }
 };
 
-// Request reset device tanpa login (dengan verifikasi kredensial)
 const requestDeviceResetWithoutLogin = async (req, res) => {
   try {
     const { username, password, reason } = req.body;
