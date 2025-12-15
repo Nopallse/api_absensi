@@ -19,6 +19,8 @@ const getAllJamDinas = async (req, res) => {
             offset,
             order: [['id', 'ASC']]
         });
+        
+        console.log(jamDinasList);
 
         const totalPages = Math.ceil(jamDinasList.count / limit);
 
