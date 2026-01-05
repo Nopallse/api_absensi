@@ -121,6 +121,8 @@ const generateKehadiranHMACWithNonce = (body, timestamp = null, nonce = null) =>
     timestamp: currentTimestamp,
     nonce: requestNonce // Tambahkan nonce ke hash
   };
+
+  console.log(dataToHash);
   
   // Hapus field yang undefined
   Object.keys(dataToHash).forEach(key => 

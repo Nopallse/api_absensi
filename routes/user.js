@@ -18,6 +18,7 @@ router.get("/kehadiran-lokasi", getKehadiranDanLokasi);
 router.get("/kehadiran/biasa", getAttendanceHistory);
 router.get("/kehadiran/biasa/today", getKehadiranBiasaToday);
 router.post("/kehadiran/biasa", validateHMAC(), createKehadiranBiasa);
+router.post("/kehadiran/biasa/tanpa-hmac", createKehadiranBiasa);
 
 router.get("/kehadiran/kegiatan/today", getKehadiranKegiatanToday);
 router.get("/kehadiran/kegiatan", getKehadiranKegiatan);
