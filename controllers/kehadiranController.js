@@ -971,9 +971,21 @@ const getAttendanceHistory = async(req, res) => {
             ];
         }
 
-        // Add status filter if provided
+        // Add status filter if provided - support absen_kat, absen_apel, dan absen_sore
         if (status) {
-            whereClause.absen_kat = status;
+            const apelStatus = ['HAP', 'TAP'];
+            const soreStatus = ['HAS', 'CP'];
+            
+            if (apelStatus.includes(status)) {
+                // Filter berdasarkan absen_apel (status masuk: HAP = Hadir Apel, TAP = Tidak Apel)
+                whereClause.absen_apel = status;
+            } else if (soreStatus.includes(status)) {
+                // Filter berdasarkan absen_sore (status pulang: HAS = Hadir Sore, CP = Cepat Pulang)
+                whereClause.absen_sore = status;
+            } else {
+                // Filter berdasarkan absen_kat (kategori kehadiran: HADIR, izin, sakit, cuti, dinas)
+                whereClause.absen_kat = status;
+            }
         }
 
         // Get kehadiran biasa data with pagination
