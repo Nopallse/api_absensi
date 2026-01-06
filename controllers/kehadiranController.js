@@ -1760,45 +1760,51 @@ const checkTodayAttendance = async (req, res) => {
 const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, waktuAbsen) => {
     try {
         const absenTgl = getTodayDate();
-        const startOfDay = new Date(absenTgl);
-        const endOfDay = new Date(absenTgl);
-        endOfDay.setHours(23, 59, 59, 999);
+        const todayDateStr = new Date(absenTgl).toISOString().split('T')[0]; // Format: YYYY-MM-DD
 
-        // Cek apakah sudah ada kehadiran biasa hari ini
+        // Cek apakah sudah ada kehadiran biasa hari ini dengan query yang lebih robust
         const existingKehadiran = await Kehadiran.findOne({
             where: {
                 absen_nip: userNip,
-                absen_tgl: {
-                    [Op.between]: [startOfDay, endOfDay]
-                }
+                [Op.and]: [
+                    Sequelize.where(
+                        Sequelize.fn('DATE', Sequelize.col('absen_tgl')),
+                        todayDateStr
+                    )
+                ]
             }
         });
 
-        // Jika sudah ada kehadiran dan ini adalah absen sore, update record yang ada
-        if (existingKehadiran && (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya')) {
-            // Hitung status sore
-            let absenSore = null;
-            if (kegiatan.jam_selesai) {
-                const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
-                const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
-                const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
-                absenSore = jamAbsen < jamSelesaiKegiatan ? 'HAS' : 'CP';
-            } else {
-                absenSore = 'HAS';
+        // Jika sudah ada kehadiran
+        if (existingKehadiran) {
+            // Jika ini adalah absen sore atau keduanya, update record yang ada
+            if (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya') {
+                // Hitung status sore
+                let absenSore = null;
+                if (kegiatan.jam_selesai) {
+                    const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
+                    const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
+                    const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                    absenSore = jamAbsen < jamSelesaiKegiatan ? 'HAS' : 'CP';
+                } else {
+                    absenSore = 'HAS';
+                }
+                
+                // Update absen_sore jika belum ada
+                if (!existingKehadiran.absen_sore) {
+                    await existingKehadiran.update({ absen_sore: absenSore });
+                    console.log(`Update absen_sore untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
+                }
             }
-            
-            // Update absen_sore jika belum ada
-            if (!existingKehadiran.absen_sore) {
-                await existingKehadiran.update({ absen_sore: absenSore });
-                console.log(`Update absen_sore untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
-            }
+            console.log(`Kehadiran biasa sudah ada untuk ${userNip} hari ini`);
             return existingKehadiran;
         }
 
-        // Jika sudah ada kehadiran dan bukan absen sore, return existing
-        if (existingKehadiran) {
-            console.log(`Kehadiran biasa sudah ada untuk ${userNip} hari ini`);
-            return existingKehadiran;
+        // Jika tidak ada kehadiran dan ini hanya absen sore, jangan buat record baru
+        // Karena absen sore harus ada absen pagi terlebih dahulu
+        if (kegiatan.include_absen === 'sore') {
+            console.log(`Tidak ada kehadiran pagi untuk ${userNip}, skip create kehadiran biasa dari absen sore`);
+            return null;
         }
 
         // Dapatkan data pegawai untuk menyimpan data historis
@@ -1833,8 +1839,8 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             }
         }
 
-        if (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya') {
-            // Jika kegiatan menggantikan absen sore, set status sore
+        if (kegiatan.include_absen === 'keduanya') {
+            // Jika kegiatan menggantikan absen sore juga, set status sore
             if (kegiatan.jam_selesai) {
                 const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
                 const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
@@ -1847,7 +1853,7 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             }
         }
 
-        // Buat kehadiran biasa dengan data historis
+        // Buat kehadiran biasa dengan data historis (hanya untuk pagi atau keduanya)
         const kehadiranBiasa = await Kehadiran.create({
             absen_nip: userNip,
             lokasi_id: lokasiId,
