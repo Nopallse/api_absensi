@@ -171,12 +171,7 @@ const updateJadwalKegiatan = async (req, res) => {
                 }
             });
             
-            if (existingJadwal) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Sudah ada jadwal kegiatan yang bentrok dengan waktu tersebut'
-                });
-            }
+           
         }
         
         await jadwal.update({
