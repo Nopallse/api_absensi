@@ -1894,13 +1894,14 @@ const createKehadiranKegiatan = async (req, res) => {
                 error: 'Anda sudah melakukan kehadiran untuk kegiatan ini hari ini'
             });
         }
+
         // Buat kehadiran kegiatan
         const kehadiranKegiatan = await KehadiranKegiatan.create({
             absen_nip: userNip,
             lokasi_id: lokasi_id,
             id_kegiatan: id_kegiatan,
-            absen_tgl: todayString,
-            absen_tgljam: Sequelize.literal('NOW()'),
+            absen_tgl: startOfDay,
+            absen_tgljam: new Date(),
             absen_kat: 'HADIR'
         });
 

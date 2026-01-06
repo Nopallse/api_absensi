@@ -50,19 +50,18 @@ const getMonthRange = (year = new Date().getFullYear(), month = new Date().getMo
 const getWeekRange = (date = new Date()) => {
     const today = new Date(date);
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Awal minggu (Minggu)
     startOfWeek.setHours(0, 0, 0, 0);
 
     const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // Akhir minggu (Sabtu)
     endOfWeek.setHours(23, 59, 59, 999);
 
     return {
-        startDate: formatDate(startOfWeek),
-        endDate: formatDate(endOfWeek)
+        startDate: startOfWeek.toISOString().split('T')[0],
+        endDate: endOfWeek.toISOString().split('T')[0]
     };
 };
-
 
 /**
  * Parse jam dari format TIME database ke Date object dalam WIB
@@ -105,10 +104,7 @@ const formatTime = (date) => {
  * @returns {string} Tanggal dalam format YYYY-MM-DD
  */
 const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return date.toISOString().split('T')[0];
 };
 
 /**
