@@ -1856,9 +1856,9 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
         if (kegiatan.include_absen === 'pagi' || kegiatan.include_absen === 'keduanya') {
             // Jika kegiatan menggantikan absen pagi, set status apel
             if (kegiatan.jam_mulai) {
-                const jamKegiatan = new Date(`2000-01-01T${kegiatan.jam_mulai}`);
+                const jamKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
                 const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
-                console.log(`Comparing jamAbsen: ${jamAbsen} with jamKegiatan: ${jamKegiatan}`);
+            
                 // Jika absen sebelum atau sama dengan jam kegiatan, HAP (Hadir Apel Pagi)
                 // Jika absen setelah jam kegiatan, TAP (Telat Apel Pagi)
                 absenApel = jamAbsen <= jamKegiatan ? 'HAP' : 'TAP';
