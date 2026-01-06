@@ -14,6 +14,11 @@ const mainSequelize = new Sequelize(
     dialect: dbConfig.main.dialect || 'mysql',
     logging: false,
     timezone: '+07:00', // Set timezone ke WIB (UTC+7)
+    dialectOptions: {
+      timezone: '+07:00', // Set MySQL connection timezone ke WIB
+      dateStrings: true, // Kembalikan DATE sebagai string, bukan Date object
+      typeCast: true // Enable type casting
+    },
     // Optimasi connection pooling untuk handle 3000+ concurrent users
     pool: {
       max: 100,       // Maksimal 100 koneksi untuk handle 3000+ users
@@ -47,6 +52,11 @@ const masterSequelize = new Sequelize(
     dialect: dbConfig.master.dialect || 'mysql',
     logging: false,
     timezone: '+07:00', // Set timezone ke WIB (UTC+7)
+    dialectOptions: {
+      timezone: '+07:00', // Set MySQL connection timezone ke WIB
+      dateStrings: true, // Kembalikan DATE sebagai string, bukan Date object
+      typeCast: true // Enable type casting
+    },
     // Optimasi connection pooling untuk handle 3000+ concurrent users
     pool: {
       max: 50,        // Maksimal 50 koneksi untuk master DB

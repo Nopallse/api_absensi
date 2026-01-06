@@ -520,12 +520,24 @@ const getKehadiranKegiatanToday = async(req, res) => {
             };
         });
 
+        // Format kehadiran_kegiatan untuk response - ambil data raw dari database
+        const formattedKehadiranKegiatan = kehadiranKegiatan.map(k => {
+            const kegiatanData = k.toJSON();
+            return {
+                id_kegiatan: kegiatanData.id_kegiatan,
+                absen_tgljam: kegiatanData.absen_tgljam,
+                absen_kat: kegiatanData.absen_kat,
+                lokasi_id: kegiatanData.lokasi_id,
+                kegiatan: kegiatanData.kegiatan
+            };
+        });
+
         res.status(200).json({
             success: true,
             message: "Data kegiatan dan kehadiran kegiatan berhasil ditemukan",
             data: {
                 kegiatan_hari_ini: kegiatanWithAttendance,
-                kehadiran_kegiatan: kehadiranKegiatan
+                kehadiran_kegiatan: formattedKehadiranKegiatan
             }
         });
 
