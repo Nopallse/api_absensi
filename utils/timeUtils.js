@@ -6,10 +6,15 @@
  */
 const getWIBDate = () => {
     const now = new Date();
-    // Asumsi: Server sudah dikonfigurasi ke timezone WIB
-    // Jika server di timezone lain, perlu konversi eksplisit
-    // Untuk sekarang, gunakan waktu lokal server
-    return now;
+    
+    // Dapatkan waktu UTC dalam milliseconds
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+    
+    // Tambahkan 7 jam untuk WIB (UTC+7)
+    const wibOffset = 7 * 60 * 60 * 1000; // 7 jam dalam milliseconds
+    const wibTime = new Date(utcTime + wibOffset);
+    
+    return wibTime;
 };
 
 /**
