@@ -473,25 +473,28 @@ const getKehadiranKegiatanToday = async(req, res) => {
         const userNip = req.user.username; // Menggunakan username sebagai NIP
         // Mendapatkan waktu saat ini dalam WIB
         const now = getWIBDate();
-        const absenTgl = now.toISOString().split('T')[0];
-
-        // Format tanggal untuk absen_tgl (YYYY-MM-DD)
-        const startOfDay = new Date(absenTgl);
-        const endOfDay = new Date(absenTgl);
-        endOfDay.setHours(23, 59, 59, 999);
+        
+        // Format tanggal hari ini (YYYY-MM-DD) dari WIB
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayDate = `${year}-${month}-${day}`;
 
         // PARALLEL PROCESSING: Jalankan query kegiatan dan kehadiran kegiatan secara bersamaan
         const [kegiatanHariIni, kehadiranKegiatan] = await Promise.all([
             // Dapatkan kegiatan hari ini berdasarkan grup peserta
             getTodayActivitiesForUser(userNip),
 
-            // Cek kehadiran kegiatan hari ini
+            // Cek kehadiran kegiatan hari ini - query langsung dengan DATE
             KehadiranKegiatan.findAll({
                 where: {
                     absen_nip: userNip,
-                    absen_tgl: {
-                        [Op.between]: [startOfDay, endOfDay]
-                    }
+                    [Op.and]: [
+                        Sequelize.where(
+                            Sequelize.fn('DATE', Sequelize.col('absen_tgl')),
+                            todayDate
+                        )
+                    ]
                 },
                 include: [
                     {
@@ -1962,10 +1965,16 @@ const getKehadiranKegiatan = async (req, res) => {
 
         // Add date filter if provided
         if (tanggal_mulai && tanggal_selesai) {
-            kegiatanWhereCondition.tanggal_kegiatan = {
-                [Op.gte]: new Date(tanggal_mulai),
-                [Op.lte]: new Date(tanggal_selesai)
-            };
+            // Format tanggal untuk query DATE
+            const startDateStr = new Date(tanggal_mulai).toISOString().split('T')[0];
+            const endDateStr = new Date(tanggal_selesai).toISOString().split('T')[0];
+            
+            kegiatanWhereCondition[Op.and] = [
+                Sequelize.where(
+                    Sequelize.fn('DATE', Sequelize.col('tanggal_kegiatan')),
+                    { [Op.between]: [startDateStr, endDateStr] }
+                )
+            ];
         }
 
         // Cari semua grup peserta yang berisi NIP user ini
