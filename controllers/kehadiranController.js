@@ -1774,6 +1774,28 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             }
         });
 
+        // Jika sudah ada kehadiran dan ini adalah absen sore, update record yang ada
+        if (existingKehadiran && (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya')) {
+            // Hitung status sore
+            let absenSore = null;
+            if (kegiatan.jam_selesai) {
+                const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
+                const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
+                const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                absenSore = jamAbsen < jamSelesaiKegiatan ? 'HAS' : 'CP';
+            } else {
+                absenSore = 'HAS';
+            }
+            
+            // Update absen_sore jika belum ada
+            if (!existingKehadiran.absen_sore) {
+                await existingKehadiran.update({ absen_sore: absenSore });
+                console.log(`Update absen_sore untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
+            }
+            return existingKehadiran;
+        }
+
+        // Jika sudah ada kehadiran dan bukan absen sore, return existing
         if (existingKehadiran) {
             console.log(`Kehadiran biasa sudah ada untuk ${userNip} hari ini`);
             return existingKehadiran;
