@@ -1779,21 +1779,31 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
         if (existingKehadiran) {
             // Jika ini adalah absen sore atau keduanya, update record yang ada
             if (kegiatan.include_absen === 'sore' || kegiatan.include_absen === 'keduanya') {
+                // Format waktu checkout
+                const absenCheckout = waktuAbsen.toTimeString().split(' ')[0];
+                
                 // Hitung status sore
                 let absenSore = null;
                 if (kegiatan.jam_selesai) {
                     const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
-                    const absenCheckin = waktuAbsen.toTimeString().split(' ')[0];
-                    const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                    const jamAbsen = new Date(`2000-01-01T${absenCheckout}`);
                     absenSore = jamAbsen < jamSelesaiKegiatan ? 'HAS' : 'CP';
                 } else {
                     absenSore = 'HAS';
                 }
                 
-                // Update absen_sore jika belum ada
+                // Update absen_sore dan absen_checkout jika belum ada
+                const updateData = {};
                 if (!existingKehadiran.absen_sore) {
-                    await existingKehadiran.update({ absen_sore: absenSore });
-                    console.log(`Update absen_sore untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
+                    updateData.absen_sore = absenSore;
+                }
+                if (!existingKehadiran.absen_checkout) {
+                    updateData.absen_checkout = absenCheckout;
+                }
+                
+                if (Object.keys(updateData).length > 0) {
+                    await existingKehadiran.update(updateData);
+                    console.log(`Update absen_sore dan absen_checkout untuk ${userNip} dari kegiatan ${kegiatan.jenis_kegiatan}`);
                 }
             }
             console.log(`Kehadiran biasa sudah ada untuk ${userNip} hari ini`);
@@ -1824,6 +1834,7 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
         // Tentukan status apel berdasarkan jam kegiatan
         let absenApel = null;
         let absenSore = null;
+        let absenCheckout = null;
         
         if (kegiatan.include_absen === 'pagi' || kegiatan.include_absen === 'keduanya') {
             // Jika kegiatan menggantikan absen pagi, set status apel
@@ -1840,10 +1851,12 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
         }
 
         if (kegiatan.include_absen === 'keduanya') {
-            // Jika kegiatan menggantikan absen sore juga, set status sore
+            // Jika kegiatan menggantikan absen sore juga, set status sore dan checkout
+            absenCheckout = absenCheckin; // Untuk keduanya, checkout sama dengan checkin
+            
             if (kegiatan.jam_selesai) {
                 const jamSelesaiKegiatan = new Date(`2000-01-01T${kegiatan.jam_selesai}`);
-                const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
+                const jamAbsen = new Date(`2000-01-01T${absenCheckout}`);
                 
                 // Jika absen sebelum jam selesai kegiatan, HAS (Hadir Apel Sore)
                 // Jika absen setelah jam selesai kegiatan, CP (Cepat Pulang)
@@ -1860,6 +1873,7 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             absen_tgl: absenTgl,
             absen_tgljam: waktuAbsen,
             absen_checkin: absenCheckin,
+            absen_checkout: absenCheckout,
             absen_apel: absenApel,
             absen_sore: absenSore,
             absen_kat: 'HADIR',
