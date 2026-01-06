@@ -396,26 +396,24 @@ const getKehadiranBiasaToday = async(req, res) => {
         // Mendapatkan waktu saat ini dalam WIB
         const now = getWIBDate();
         
-        // Gunakan waktu WIB untuk mendapatkan tanggal hari ini
+        // Format tanggal hari ini (YYYY-MM-DD) dari WIB
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
-        const absenTgl = `${year}-${month}-${day}`;
-    
-        // Format tanggal untuk absen_tgl (YYYY-MM-DD) dengan timezone UTC
-        const startOfDay = new Date(absenTgl);
-        const endOfDay = new Date(absenTgl);
-        endOfDay.setHours(23, 59, 59, 999);
+        const todayDate = `${year}-${month}-${day}`;
     
         // PARALLEL PROCESSING: Jalankan query yang independen secara bersamaan
         const [kehadiranBiasa, pegawai] = await Promise.all([
-          // Cek kehadiran biasa hari ini
+          // Cek kehadiran biasa hari ini - query langsung dengan tanggal DATE
           Kehadiran.findOne({
             where: {
               absen_nip: userNip,
-              absen_tgl: {
-                [Op.between]: [startOfDay, endOfDay]
-              }
+              [Op.and]: [
+                Sequelize.where(
+                  Sequelize.fn('DATE', Sequelize.col('absen_tgl')),
+                  todayDate
+                )
+              ]
             },
             attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
           }),
@@ -946,16 +944,16 @@ const getAttendanceHistory = async(req, res) => {
 
         // Add date range filter if provided
         if (startDate && endDate) {
-            // Convert to start and end of day for proper filtering
-            const startOfDay = new Date(startDate);
-            startOfDay.setHours(0, 0, 0, 0);
+            // Format tanggal untuk query DATE
+            const startDateStr = startDate.toISOString().split('T')[0];
+            const endDateStr = endDate.toISOString().split('T')[0];
             
-            const endOfDay = new Date(endDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            
-            whereClause.absen_tgl = {
-                [Op.between]: [startOfDay, endOfDay],
-            };
+            whereClause[Op.and] = [
+                Sequelize.where(
+                    Sequelize.fn('DATE', Sequelize.col('absen_tgl')),
+                    { [Op.between]: [startDateStr, endDateStr] }
+                )
+            ];
         }
 
         // Add status filter if provided
