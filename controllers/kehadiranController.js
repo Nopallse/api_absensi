@@ -1896,19 +1896,20 @@ const createKehadiranKegiatan = async (req, res) => {
         }
 
         // Buat kehadiran kegiatan
+        const waktuAbsen = getWIBDate();
         const kehadiranKegiatan = await KehadiranKegiatan.create({
             absen_nip: userNip,
             lokasi_id: lokasi_id,
             id_kegiatan: id_kegiatan,
             absen_tgl: startOfDay,
-            absen_tgljam: new Date(),
+            absen_tgljam: waktuAbsen,
             absen_kat: 'HADIR'
         });
 
         // Cek apakah kegiatan ini menggantikan absen biasa - ASYNC tanpa await
         if (kegiatan.include_absen && kegiatan.include_absen !== 'none') {
             // Jalankan di background tanpa menunggu
-            createKehadiranBiasaFromKegiatan(userNip, lokasi_id, kegiatan, kehadiranKegiatan.absen_tgljam)
+            createKehadiranBiasaFromKegiatan(userNip, lokasi_id, kegiatan, waktuAbsen)
                 .catch(err => console.error('Background kehadiran biasa error:', err));
         }
 
