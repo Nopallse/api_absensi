@@ -1858,10 +1858,11 @@ const createKehadiranBiasaFromKegiatan = async (userNip, lokasiId, kegiatan, wak
             if (kegiatan.jam_mulai) {
                 const jamKegiatan = new Date(`2000-01-01T${kegiatan.jam_mulai}`);
                 const jamAbsen = new Date(`2000-01-01T${absenCheckin}`);
-                
+                console.log(`Comparing jamAbsen: ${jamAbsen} with jamKegiatan: ${jamKegiatan}`);
                 // Jika absen sebelum atau sama dengan jam kegiatan, HAP (Hadir Apel Pagi)
                 // Jika absen setelah jam kegiatan, TAP (Telat Apel Pagi)
                 absenApel = jamAbsen <= jamKegiatan ? 'HAP' : 'TAP';
+                console.log(`Kegiatan jam mulai: ${kegiatan.jam_mulai}, absenCheckin: ${absenCheckin}, status apel: ${absenApel}`);
             } else {
                 absenApel = 'HAP'; // Default HAP jika tidak ada jam kegiatan
             }
