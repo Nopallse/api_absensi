@@ -395,9 +395,14 @@ const getKehadiranBiasaToday = async(req, res) => {
     
         // Mendapatkan waktu saat ini dalam WIB
         const now = getWIBDate();
-        const absenTgl = getTodayDate();
+        
+        // Gunakan waktu WIB untuk mendapatkan tanggal hari ini
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const absenTgl = `${year}-${month}-${day}`;
     
-        // Format tanggal untuk absen_tgl (YYYY-MM-DD)
+        // Format tanggal untuk absen_tgl (YYYY-MM-DD) dengan timezone UTC
         const startOfDay = new Date(absenTgl);
         const endOfDay = new Date(absenTgl);
         endOfDay.setHours(23, 59, 59, 999);
