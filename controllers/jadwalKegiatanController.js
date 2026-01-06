@@ -91,38 +91,7 @@ const createJadwalKegiatan = async (req, res) => {
             }
         }
         
-        // Cek apakah ada konflik waktu jika jam_mulai dan jam_selesai diisi
-        if (jam_mulai && jam_selesai) {
-            const existingJadwal = await MasterJadwalKegiatan.findOne({
-                where: {
-                    tanggal_kegiatan,
-                    [Op.or]: [
-                        // Jam mulai baru berada di antara jam yang sudah ada
-                        {
-                            jam_mulai: { [Op.lte]: jam_mulai },
-                            jam_selesai: { [Op.gt]: jam_mulai }
-                        },
-                        // Jam selesai baru berada di antara jam yang sudah ada
-                        {
-                            jam_mulai: { [Op.lt]: jam_selesai },
-                            jam_selesai: { [Op.gte]: jam_selesai }
-                        },
-                        // Jam baru mencakup jam yang sudah ada
-                        {
-                            jam_mulai: { [Op.gte]: jam_mulai },
-                            jam_selesai: { [Op.lte]: jam_selesai }
-                        }
-                    ]
-                }
-            });
-            
-            if (existingJadwal) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Sudah ada jadwal kegiatan yang bentrok dengan waktu tersebut'
-                });
-            }
-        }
+        
         
         const newJadwal = await MasterJadwalKegiatan.create({
             tanggal_kegiatan,
