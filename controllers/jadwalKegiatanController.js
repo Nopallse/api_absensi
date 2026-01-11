@@ -68,7 +68,7 @@ const getAllJadwalKegiatan = async (req, res) => {
 // Menambah jadwal kegiatan baru
 const createJadwalKegiatan = async (req, res) => {
     try {
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen, dispensasi_keterlambatan } = req.body;
         
         // Validasi input
         if (!tanggal_kegiatan || !jenis_kegiatan || !keterangan) {
@@ -99,7 +99,8 @@ const createJadwalKegiatan = async (req, res) => {
             keterangan,
             jam_mulai: jam_mulai || null,
             jam_selesai: jam_selesai || null,
-            include_absen: include_absen || 'none'
+            include_absen: include_absen || 'none',
+            dispensasi_keterlambatan: dispensasi_keterlambatan || null
         });
         
         res.status(201).json({
@@ -121,7 +122,7 @@ const createJadwalKegiatan = async (req, res) => {
 const updateJadwalKegiatan = async (req, res) => {
     try {
         const { id_kegiatan } = req.params;
-        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen } = req.body;
+        const { tanggal_kegiatan, jenis_kegiatan, keterangan, jam_mulai, jam_selesai, include_absen, dispensasi_keterlambatan } = req.body;
         
         const jadwal = await MasterJadwalKegiatan.findByPk(id_kegiatan);
         if (!jadwal) {
@@ -180,7 +181,8 @@ const updateJadwalKegiatan = async (req, res) => {
             keterangan: keterangan || jadwal.keterangan,
             jam_mulai: jam_mulai !== undefined ? jam_mulai : jadwal.jam_mulai,
             jam_selesai: jam_selesai !== undefined ? jam_selesai : jadwal.jam_selesai,
-            include_absen: include_absen !== undefined ? include_absen : jadwal.include_absen
+            include_absen: include_absen !== undefined ? include_absen : jadwal.include_absen,
+            dispensasi_keterlambatan: dispensasi_keterlambatan !== undefined ? dispensasi_keterlambatan : jadwal.dispensasi_keterlambatan
         });
         
         res.status(200).json({

@@ -258,7 +258,7 @@ const getTodayActivitiesForUser = async (userNip) => {
                     include: [
                         {
                             model: MasterJadwalKegiatan,
-                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'],
+                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai', 'dispensasi_keterlambatan'],
                             required: false // Tidak required agar semua grup terambil
                         },
                         {
@@ -310,7 +310,7 @@ const getTodayActivitiesForUser = async (userNip) => {
                     ]
                 }
             ],
-            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai'],
+            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai', 'dispensasi_keterlambatan'],
             order: [['jam_mulai', 'ASC']]
         });
         console.log('>>>>>>>>>>>>>>> activities', activities);
@@ -379,6 +379,7 @@ const getTodayActivitiesForUser = async (userNip) => {
                 keterangan: activity.keterangan,
                 jam_mulai: activity.jam_mulai,
                 jam_selesai: activity.jam_selesai,
+                dispensasi_keterlambatan: activity.dispensasi_keterlambatan,
                 lokasi_list: lokasiListData
             };
         });
@@ -500,7 +501,7 @@ const getKehadiranKegiatanToday = async(req, res) => {
                     {
                         model: MasterJadwalKegiatan,
                         as: 'kegiatan',
-                        attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
+                            attributes: ['id_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai', 'dispensasi_keterlambatan']
                     }
                 ],
                 attributes: ['id_kegiatan', 'absen_tgljam', 'absen_kat', 'lokasi_id']
@@ -2075,7 +2076,7 @@ const getKehadiranKegiatan = async (req, res) => {
                     include: [
                         {
                             model: MasterJadwalKegiatan,
-                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai']
+                            attributes: ['id_kegiatan', 'tanggal_kegiatan', 'jenis_kegiatan', 'keterangan', 'jam_mulai', 'jam_selesai', 'dispensasi_keterlambatan']
                         },
                         {
                             model: Lokasi,
@@ -2213,6 +2214,7 @@ const getKehadiranKegiatan = async (req, res) => {
                 keterangan: kegiatan.keterangan,
                 jam_mulai: kegiatan.jam_mulai,
                 jam_selesai: kegiatan.jam_selesai,
+                dispensasi_keterlambatan: kegiatan.dispensasi_keterlambatan,
                 lokasi_list: lokasiListData,
                 kehadiran_data: kehadiran ? {
                     absen_tgljam: kehadiran.absen_tgljam,

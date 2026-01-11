@@ -63,6 +63,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 'none',
         comment: 'Ketentuan absen: none=Hanya kehadiran kegiatan, pagi=Menggantikan absen pagi, sore=Menggantikan absen sore, keduanya=Menggantikan absen pagi dan sore'
+      },
+      dispensasi_keterlambatan: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: null,
+        comment: 'Dispensasi keterlambatan dalam menit. Null berarti tidak ada dispensasi'
       }
     },
     {
