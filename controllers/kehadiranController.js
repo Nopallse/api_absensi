@@ -49,9 +49,6 @@ const createKehadiranBiasa = async(req, res) => {
         today.setHours(0, 0, 0, 0);
         const absenTgl = getTodayDate();
         const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
-        const startOfDay = new Date(absenTgl);
-        const endOfDay = new Date(absenTgl);
-        endOfDay.setHours(23, 59, 59, 999);
 
         // Jalankan semua query secara parallel dengan caching
         const [
@@ -80,11 +77,12 @@ const createKehadiranBiasa = async(req, res) => {
             Kehadiran.findOne({
                 where: {
                     absen_nip: userNip,
-                    absen_tgl: { [Op.between]: [startOfDay, endOfDay] }
+                    absen_tgl: absenTgl
                 },
                 attributes: ['absen_id', 'absen_nip', 'lokasi_id', 'absen_tgl', 'absen_tgljam', 'absen_checkin', 'absen_checkout', 'absen_kat', 'absen_apel', 'absen_sore']
             })
         ]);
+        
 
         // Validasi hasil query
         if (!user) {
